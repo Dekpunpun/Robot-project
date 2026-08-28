@@ -759,11 +759,26 @@ class Game:
 
         # Roofs go on last, over the room and anyone standing in it — every
         # building except the one the player is inside.
+        t = self.tick / 60.0
         here = self.player_zone
         roofed = [z for z in self.world.roofs if z != here]
         for zone in roofed:
             roof, wx, wy = self.world.roofs[zone]
             s.blit(roof, (wx - cam[0], wy - cam[1]))
+
+        # Smoke, only from the chimneys of buildings currently wearing a roof.
+        for cx, cy, zone in self.world.chimneys:
+            if zone == here:
+                continue
+            for i in range(4):
+                age = (t * 0.55 + i * 0.25) % 1.0
+                puff = int(2 + age * 4)
+                sx = cx - cam[0] + int(math.sin(age * 5 + i) * 4)
+                sy = cy - cam[1] - int(age * 26)
+                smoke = pygame.Surface((puff * 2, puff * 2), pygame.SRCALPHA)
+                pygame.draw.circle(smoke, (188, 184, 180, int(120 * (1 - age))),
+                                   (puff, puff), puff)
+                s.blit(smoke, (sx - puff, sy - puff))
 
         # Standing at the foot of a building, a 23px sprite reaches up into the
         # roof above it and vanishes. Anyone outdoors who overlaps a roof this
@@ -786,7 +801,6 @@ class Game:
         # Night, punched through by every lamp in range.
         dark = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         dark.fill((10, 12, 30, 132))
-        t = self.tick / 60.0
         for lx, ly, r in self.world.lights:
             # A lamp under a roof you are not standing under stays hidden,
             # otherwise its pool glows through the shingles.

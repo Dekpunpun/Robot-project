@@ -33,12 +33,13 @@ class Building:
     sealed the building shut.
     """
 
-    def __init__(self, zone, title, subtitle, rooms, corridor):
+    def __init__(self, zone, title, subtitle, rooms, corridor, style="military"):
         self.zone = zone
         self.title = title
         self.subtitle = subtitle
         self.rooms = rooms  # [(x, y, w, h, floor)]
         self.corridor = corridor  # (x, y, w, h, floor)
+        self.style = style  # which roof material this building wears
 
     @property
     def _exits_south(self):
@@ -72,18 +73,25 @@ class Building:
 
 BUILDINGS = [
     Building("vault", "FORT CALLOW", "SPECIAL WEAPONS VAULT",
-             rooms=[(4, 3, 16, 9, "marble_d")], corridor=(10, 12, 3, 7, "marble_d")),
+             rooms=[(4, 3, 16, 9, "marble_d")], corridor=(10, 12, 3, 7, "marble_d"),
+             style="military"),
     Building("command", "FORT CALLOW", "COMMAND OFFICE",
-             rooms=[(44, 3, 16, 9, "carpet")], corridor=(50, 12, 3, 7, "carpet")),
+             rooms=[(44, 3, 16, 9, "carpet")], corridor=(50, 12, 3, 7, "carpet"),
+             style="military"),
     Building("precinct", "THIRD PRECINCT", "HOME BASE",
-             rooms=[(24, 40, 16, 8, "wood")], corridor=(30, 34, 3, 6, "wood")),
+             rooms=[(24, 40, 16, 8, "wood")], corridor=(30, 34, 3, 6, "wood"),
+             style="civic"),
     Building("milner", "14 MILNER STREET", "THE THORNE HOUSE",
              rooms=[(4, 30, 9, 11, "wood"), (13, 30, 8, 11, "marble_d")],
-             corridor=(7, 41, 3, 5, "wood")),
+             corridor=(7, 41, 3, 5, "wood"), style="house"),
     Building("saltrow", "SALT ROW, DOCK 4", "THE FISHING CABIN",
-             rooms=[(43, 30, 14, 10, "wood")], corridor=(48, 40, 3, 5, "wood")),
+             rooms=[(43, 30, 14, 10, "wood")], corridor=(48, 40, 3, 5, "wood"),
+             style="cabin"),
+    # Held two tiles clear of the vault: with the wall shell included, roofs
+    # that abut read as one long slab instead of three separate buildings.
     Building("motorpool", "FORT CALLOW", "MOTOR POOL",
-             rooms=[(22, 3, 14, 9, "marble_d")], corridor=(25, 12, 3, 6, "marble_d")),
+             rooms=[(24, 3, 14, 9, "marble_d")], corridor=(26, 12, 3, 6, "marble_d"),
+             style="military"),
 ]
 
 
@@ -234,19 +242,117 @@ class World:
             tiles |= shell
         self.zone_tiles = members
 
-        variants = [art.tile_roof(i) for i in range(4)]
+        # Two roofs that touch read as one long slab rather than as separate
+        # buildings, so they are kept a tile apart.
+        zones = list(members)
+        for i, a in enumerate(zones):
+            for b in zones[i + 1:]:
+                touching = {(x + dx, y + dy) for x, y in members[a]
+                            for dx in (-1, 0, 1) for dy in (-1, 0, 1)} & members[b]
+                if touching:
+                    raise ValueError(
+                        f"roofs of {a!r} and {b!r} touch at {sorted(touching)[0]} — "
+                        f"leave a tile of ground between them"
+                    )
+
+        by_zone = {b.zone: b for b in BUILDINGS}
         roofs = {}
+        self.chimneys = []
         for zone, tiles in members.items():
-            x0 = min(t[0] for t in tiles)
-            y0 = min(t[1] for t in tiles)
-            w = max(t[0] for t in tiles) - x0 + 1
-            h = max(t[1] for t in tiles) - y0 + 1
-            surf = pygame.Surface((w * TILE, h * TILE), pygame.SRCALPHA)
-            for x, y in tiles:
-                surf.blit(variants[(x * 7 + y * 3) % len(variants)],
-                          ((x - x0) * TILE, (y - y0) * TILE))
-            roofs[zone] = (surf, x0 * TILE, y0 * TILE)
+            roofs[zone] = self._bake_exterior(by_zone[zone], tiles)
         return roofs
+
+    # Overhang below the eave, where the roof throws a shadow onto the ground.
+    EAVE_DROP = 5
+
+    def _bake_exterior(self, building, tiles):
+        """Draw one building as a pitched structure rather than a flat lid.
+
+        Each column of the footprint gets its own ridge, halfway down that
+        column, so an L-shaped building with a corridor still reads as a roof
+        rather than as a rectangle. The back slope sits in shadow, the ridge
+        catches the light, the front slope runs down to a dark eave, and the
+        whole thing drops a shadow onto the ground below it.
+        """
+        pal = art.ROOF_STYLES[building.style]
+        shingles = art.build_roof_tiles(building.style)
+        x0 = min(t[0] for t in tiles)
+        y0 = min(t[1] for t in tiles)
+        w = max(t[0] for t in tiles) - x0 + 1
+        h = max(t[1] for t in tiles) - y0 + 1
+        surf = pygame.Surface((w * TILE, h * TILE + self.EAVE_DROP), pygame.SRCALPHA)
+
+        cols = {}
+        for x, y in tiles:
+            cols.setdefault(x, []).append(y)
+
+        # Ground shadow first, so the roof lands on top of it.
+        shadow = pygame.Surface(surf.get_size(), pygame.SRCALPHA)
+        for x, ys in cols.items():
+            px = (x - x0) * TILE
+            shadow.fill((0, 0, 0, 96), (px + 2, (max(ys) - y0 + 1) * TILE, TILE, self.EAVE_DROP))
+        surf.blit(shadow, (0, 0))
+
+        for x, ys in cols.items():
+            top, bottom = min(ys), max(ys)
+            ridge = (top + bottom) // 2
+            px = (x - x0) * TILE
+            reach = max(1, (bottom - top) / 2)
+            for y in ys:
+                py = (y - y0) * TILE
+                slope = "back" if y <= ridge else "front"
+                bank = shingles[slope]
+                surf.blit(bank[(x * 7 + y * 3) % len(bank)], (px, py))
+                # Both slopes fall away from the ridge. Without this the two
+                # halves read as flat two-tone bands rather than a pitch.
+                fall = abs(y - ridge) / reach
+                dim = int((74 if slope == "back" else 44) * fall)
+                if dim:
+                    shade = pygame.Surface((TILE, TILE), pygame.SRCALPHA)
+                    shade.fill((8, 8, 14, dim))
+                    surf.blit(shade, (px, py))
+            # Ridge cap, eave band, and the shadow the eave casts on the wall.
+            ry = (ridge - y0) * TILE
+            pygame.draw.rect(surf, pal["cap"], (px, ry, TILE, 3))
+            pygame.draw.rect(surf, pal["trim"], (px, ry + 3, TILE, 1))
+            by = (bottom - y0 + 1) * TILE
+            pygame.draw.rect(surf, pal["eave"], (px, by - 3, TILE, 3))
+
+        # Gable trim down the outside edges of every column run.
+        for x, ys in cols.items():
+            px = (x - x0) * TILE
+            for edge, ex in (((x - 1) not in cols, px), ((x + 1) not in cols, px + TILE - 1)):
+                if edge:
+                    for y in ys:
+                        py = (y - y0) * TILE
+                        pygame.draw.rect(surf, pal["trim"], (ex, py, 1, TILE))
+
+        self._fit_roof(building, surf, cols, x0, y0, pal)
+        return surf, x0 * TILE, y0 * TILE
+
+    def _fit_roof(self, building, surf, cols, x0, y0, pal):
+        """Chimneys, vents and signage — what tells one roof from another."""
+        props = art.objects()
+        rx, ry, rw, rh, _ = building.rooms[0]
+
+        if pal.get("chimney"):
+            cx, cy = rx + 1, ry + 1
+            px, py = (cx - x0) * TILE, (cy - y0) * TILE
+            surf.blit(props["chimney"], (px, py - 4))
+            # Remembered in world pixels so the smoke can animate above it.
+            self.chimneys.append((cx * TILE + 5, cy * TILE - 4, building.zone))
+
+        if pal.get("vents"):
+            for i in range(1, 4):
+                vx = rx + (rw * i) // 4
+                if vx in cols:
+                    surf.blit(props["roof_vent"], ((vx - x0) * TILE + 2, (ry + 1 - y0) * TILE))
+
+        if pal.get("sign"):
+            # Hung off the eave directly over the doorway.
+            dx = building.corridor[0]
+            row = min(cols[dx]) if building._exits_south else max(cols[dx])
+            surf.blit(props["roof_sign"], ((dx - x0) * TILE - 5, (row - y0) * TILE + 4))
 
     # --- furniture -----------------------------------------------------------
 
@@ -349,8 +455,8 @@ class World:
                    "Motor pool log says it has not moved in a week. The odometer says "
                    "otherwise, and someone has wiped the bed out with solvent - it is "
                    "the only clean thing in the building.")
-        put("workbench", 23, 9, solid=True)
-        put("shelf", 22, 4, solid=True)
+        put("workbench", 25, 9, solid=True)
+        put("shelf", 24, 4, solid=True)
         for tx in (28, 30):
             put("oil_drum", tx, 9, solid=(1, 8, 10, 7))
         put("crate", 34, 9, solid=True)

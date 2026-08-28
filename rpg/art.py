@@ -658,19 +658,88 @@ def tile_wainscot(seed):
     return s
 
 
-def tile_roof(seed):
-    """Shingles. Laid over a building whenever the player is outside it, so a
-    room only reveals itself once you have actually walked in."""
+# --- building exteriors ------------------------------------------------------
+#
+# A building seen from outside is a roof, and a flat rectangle of shingles
+# reads as a lid rather than a structure. Each one is built as a pitched roof
+# instead: a back slope in shadow, a ridge cap catching the light, a front
+# slope, and a dark eave overhanging the wall below. Materials differ per
+# building so the fort, the precinct and a fisherman's cabin are told apart
+# from across the map.
+
+ROOF_STYLES = {
+    "military": dict(
+        back=(66, 72, 66), front=(90, 98, 88), cap=(122, 132, 118),
+        eave=(34, 38, 36), trim=(48, 54, 50), vents=True),
+    "civic": dict(
+        back=(92, 46, 42), front=(124, 64, 54), cap=(160, 88, 72),
+        eave=(52, 26, 24), trim=(70, 34, 30), sign=True),
+    "house": dict(
+        back=(66, 50, 44), front=(92, 70, 56), cap=(122, 94, 72),
+        eave=(40, 30, 26), trim=(52, 38, 32), chimney=True),
+    "cabin": dict(
+        back=(52, 60, 54), front=(72, 82, 70), cap=(96, 108, 92),
+        eave=(32, 38, 34), trim=(42, 48, 42), chimney=True),
+}
+
+
+def roof_tile(base, light, seed):
+    """One tile of shingle course in a given shade."""
     rng = random.Random(seed)
     s = pygame.Surface((TILE, TILE))
-    s.fill((52, 44, 48))
+    s.fill(base)
     for i, y in enumerate(range(0, TILE, 5)):
         x = 0 if i % 2 == 0 else -3
         while x < TILE:
-            pygame.draw.rect(s, (72, 62, 66), (x + 1, y, 5, 4))
-            pygame.draw.line(s, (94, 82, 86), (x + 1, y), (x + 5, y))
+            pygame.draw.rect(s, light, (x + 1, y, 5, 4))
+            pygame.draw.line(s, base, (x + 1, y + 3), (x + 5, y + 3))
             x += 6
-    _speckle(s, rng, [(44, 38, 42), (86, 74, 78)], 9)
+    _speckle(s, rng, [base, light], 7)
+    return s
+
+
+def build_roof_tiles(style):
+    """Shingle courses for one material: shadowed back slope, lit front slope."""
+    p = ROOF_STYLES[style]
+    return {
+        "back": [roof_tile(p["back"], p["trim"], i) for i in range(3)],
+        "front": [roof_tile(p["front"], p["cap"], i + 7) for i in range(3)],
+    }
+
+
+def obj_chimney():
+    s = _surf(10, 14)
+    _box(s, (0, 2, 10, 12), (92, 62, 52), (118, 82, 66), INK)
+    for y in (5, 9):
+        pygame.draw.line(s, (62, 40, 34), (1, y), (8, y))
+    pygame.draw.rect(s, (120, 86, 70), (0, 0, 10, 3))
+    pygame.draw.rect(s, (24, 20, 20), (2, 1, 6, 2))  # the flue opening
+    pygame.draw.rect(s, INK, (0, 0, 10, 3), 1)
+    return s
+
+
+def obj_roof_vent():
+    s = _surf(12, 9)
+    _box(s, (0, 2, 12, 7), (62, 68, 62), (88, 96, 86), INK)
+    pygame.draw.rect(s, (86, 94, 84), (0, 0, 12, 3))
+    for x in range(2, 11, 3):
+        pygame.draw.rect(s, (34, 38, 34), (x, 4, 1, 4))
+    return s
+
+
+def obj_roof_sign(label_seed=0):
+    """A precinct sign board hung off the eave. The lettering is suggested,
+    not spelled — real glyphs at this size turn to mush."""
+    s = _surf(26, 11)
+    _box(s, (0, 0, 26, 9), (34, 30, 38), (58, 52, 62), INK)
+    rng = random.Random(label_seed)
+    x = 3
+    while x < 23:
+        w = rng.choice((2, 3))
+        pygame.draw.rect(s, ACCENT, (x, 3, w, 3))
+        x += w + 2
+    for bx in (3, 22):  # the brackets it hangs from
+        pygame.draw.rect(s, (72, 66, 78), (bx, 9, 1, 2))
     return s
 
 
@@ -1379,6 +1448,9 @@ def build_objects():
         "weapon_rack": obj_weapon_rack(),
         "truck": obj_truck(),
         "oil_drum": obj_oil_drum(),
+        "chimney": obj_chimney(),
+        "roof_vent": obj_roof_vent(),
+        "roof_sign": obj_roof_sign(),
         "bunk": obj_bunk(),
         "stove": obj_stove(),
         **{f"marker{i}": obj_marker(i) for i in range(1, 6)},
