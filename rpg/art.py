@@ -430,38 +430,49 @@ BRICKER_SLUMP = [
 ]
 
 
+# Every legend below is the character's actual uniform, not a colour swap:
+# 'c/C/k' is the garment, 't' the collar, 'p/o' the trousers and boots. Where a
+# uniform is a single piece of cloth the trousers share the jacket's colour,
+# which is what makes coveralls read as coveralls and not as a shirt.
+
+# Staff Sergeant, off duty at the cabin: olive field uniform, matching trousers.
 THORNE = {
     "_": INK, "H": (52, 58, 44), "h": (74, 86, 58), "b": (30, 28, 46),
     "s": (208, 168, 134), "S": (172, 122, 88), "e": (30, 24, 36),
     "c": (74, 86, 58), "C": (54, 64, 42), "k": (100, 114, 80),
-    "t": (60, 70, 50), "p": (40, 38, 34), "o": (26, 24, 22),
+    "t": (60, 70, 50), "p": (58, 66, 46), "o": (34, 38, 30),
 }
 THORNE_STANDING = _standing(THORNE_BODY, THORNE)
 THORNE_BROKEN = _standing(THORNE_SLUMP, THORNE)
 
+# Corporal on vault duty: tan working fatigues, trousers to match, dark boots.
 DOSS = {
-    "_": INK, "H": (74, 66, 48), "h": (132, 118, 84), "b": (30, 28, 46),
+    "_": INK, "H": (86, 78, 54), "h": (138, 126, 90), "b": (30, 28, 46),
     "s": (216, 172, 132), "S": (176, 128, 92), "e": (30, 24, 36),
     "c": (132, 118, 84), "C": (98, 86, 58), "k": (162, 148, 112),
-    "t": (98, 86, 58), "p": (52, 46, 36), "o": (30, 26, 20),
+    "t": (98, 86, 58), "p": (118, 106, 74), "o": (46, 40, 28),
 }
 DOSS_STANDING = _standing(DOSS_BODY, DOSS)
 DOSS_OPEN = _standing(DOSS_SLUMP, DOSS)
 
+# Battalion Commander: army service dress, not navy blue. Deep olive with the
+# brass showing — 'k' runs as the double-breasted button rows on her body.
 ASHWORTH = {
-    "_": INK, "H": (34, 36, 46), "h": (58, 60, 74), "b": (24, 22, 34),
+    "_": INK, "H": (48, 54, 42), "h": (70, 78, 58), "b": (26, 30, 24),
     "s": (196, 158, 128), "S": (158, 118, 92), "e": (30, 24, 36),
-    "c": (58, 60, 74), "C": (40, 42, 54), "k": (82, 84, 100),
-    "t": (188, 148, 70), "p": (36, 38, 48), "o": (22, 20, 30),
+    "c": (64, 72, 54), "C": (44, 50, 38), "k": (198, 158, 76),
+    "t": (206, 202, 186), "p": (52, 58, 44), "o": (28, 30, 24),
 }
 ASHWORTH_STANDING = _standing(ASHWORTH_BODY, ASHWORTH)
 ASHWORTH_OPEN = _standing(ASHWORTH_SLUMP, ASHWORTH)
 
+# Motor pool mechanic: one-piece coveralls, so the trousers are the same cloth
+# as the chest — that continuity is the whole silhouette.
 BRICKER = {
-    "_": INK, "H": (40, 40, 44), "h": (60, 60, 66), "b": (26, 26, 32),
+    "_": INK, "H": (40, 40, 46), "h": (60, 60, 68), "b": (26, 26, 32),
     "s": (212, 166, 126), "S": (170, 120, 86), "e": (30, 24, 36),
-    "c": (70, 84, 96), "C": (50, 62, 72), "k": (96, 112, 124),
-    "t": (50, 62, 72), "p": (44, 44, 48), "o": (28, 26, 24),
+    "c": (58, 68, 84), "C": (40, 48, 62), "k": (84, 96, 114),
+    "t": (58, 68, 84), "p": (58, 68, 84), "o": (30, 28, 26),
 }
 BRICKER_STANDING = _standing(BRICKER_BODY, BRICKER)
 BRICKER_SHAKEN = _standing(BRICKER_SLUMP, BRICKER)
@@ -1236,6 +1247,45 @@ def obj_munitions_crate():
     return s
 
 
+def obj_weapon_rack():
+    """An arms rack. The empty slots are the story: five of them."""
+    s = _surf(30, 22)
+    _box(s, (0, 0, 30, 22), (64, 58, 46), (88, 80, 62), (36, 32, 24))
+    pygame.draw.rect(s, (36, 32, 24), (0, 9, 30, 1))
+    for i, x in enumerate(range(3, 28, 5)):
+        if i in (1, 3):  # two slots stand empty
+            pygame.draw.rect(s, (28, 26, 20), (x, 2, 3, 17))
+            continue
+        pygame.draw.rect(s, (48, 44, 36), (x, 2, 3, 17))  # barrel
+        pygame.draw.rect(s, (92, 62, 40), (x, 12, 3, 6))  # stock
+        pygame.draw.rect(s, (120, 116, 104), (x + 1, 3, 1, 8))
+    return s
+
+
+def obj_bunk():
+    """A single cot. Slept in, not made."""
+    s = _surf(20, 30)
+    _box(s, (0, 2, 20, 28), WOOD_D, WOOD, INK)
+    pygame.draw.rect(s, (188, 180, 158), (2, 5, 16, 10))  # pillow end
+    pygame.draw.rect(s, (152, 144, 124), (2, 13, 16, 2))
+    pygame.draw.rect(s, (86, 74, 68), (2, 15, 16, 13))  # blanket, thrown back
+    pygame.draw.rect(s, (108, 94, 86), (2, 15, 16, 2))
+    pygame.draw.rect(s, INK, (2, 5, 16, 23), 1)
+    return s
+
+
+def obj_stove():
+    """A cast-iron stove with the fire still in it."""
+    s = _surf(16, 24)
+    _box(s, (1, 4, 14, 20), (52, 50, 54), (76, 74, 80), INK)
+    pygame.draw.rect(s, (34, 32, 36), (3, 10, 10, 8))
+    pygame.draw.rect(s, (198, 96, 40), (4, 13, 8, 4))  # firebox glow
+    pygame.draw.rect(s, (240, 176, 72), (5, 14, 6, 2))
+    pygame.draw.rect(s, (40, 38, 42), (6, 0, 4, 5))  # flue
+    pygame.draw.rect(s, BRASS_D, (3, 20, 10, 1))
+    return s
+
+
 def build_objects():
     return {
         "plinth": obj_plinth(),
@@ -1284,6 +1334,9 @@ def build_objects():
         "wallmap": obj_wallmap(),
         "bollard": obj_bollard(),
         "munitions_crate": obj_munitions_crate(),
+        "weapon_rack": obj_weapon_rack(),
+        "bunk": obj_bunk(),
+        "stove": obj_stove(),
         **{f"marker{i}": obj_marker(i) for i in range(1, 6)},
     }
 
@@ -1419,15 +1472,17 @@ def _headwear(s, lg, kind):
         pygame.draw.polygon(s, INK, [(13, 10), (18, 2), (30, 2), (35, 10)], 1)
         pygame.draw.line(s, lit, (19, 4), (29, 4))
     elif kind == "peaked":  # Ashworth — officer's cap, badge and wide bill
+        dark = lg["C"]
         pygame.draw.rect(s, band, (12, 1, 24, 7))
         pygame.draw.rect(s, lit, (12, 1, 24, 1))
-        pygame.draw.rect(s, (74, 76, 92), (12, 8, 24, 3))  # cap band
+        pygame.draw.rect(s, dark, (12, 8, 24, 3))  # cap band
         pygame.draw.rect(s, BRASS, (23, 3, 3, 3))  # badge
         pygame.draw.rect(s, BRASS_D, (23, 6, 3, 1))
-        # The bill has to stay lighter than the terminal background or the
-        # whole cap reads as floating clear of the head.
-        pygame.draw.rect(s, (58, 60, 74), (9, 11, 30, 2))  # bill
-        pygame.draw.rect(s, (86, 88, 104), (9, 11, 30, 1))
+        # Band and bill come from her own uniform, not a fixed colour, so the
+        # cap can never drift out of step with the coat. The bill still has to
+        # stay lighter than the terminal background or it reads as a gap.
+        pygame.draw.rect(s, dark, (9, 11, 30, 2))  # bill
+        pygame.draw.rect(s, band, (9, 11, 30, 1))
         pygame.draw.rect(s, INK, (9, 13, 30, 1))
     else:  # bricker — knit beanie, ribbed brim
         pygame.draw.rect(s, band, (13, 3, 22, 8))

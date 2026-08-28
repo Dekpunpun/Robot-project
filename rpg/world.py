@@ -206,8 +206,12 @@ class World:
         put("lamp", 6, 9, solid=(2, 24, 12, 6))
         lamp(6, 9, 74, oy=26)
 
-        put("munitions_crate", 10, 4, solid=True)
         put("munitions_crate", 12, 10, solid=True)
+        put("munitions_crate", 14, 4, solid=True)
+        rack = put("weapon_rack", 9, 4, solid=True)
+        self._look(rack, "The arms rack",
+                   "Serial-stencilled slots, every one of them signed for. Two stand "
+                   "empty tonight, and the dust in them is a different age.")
 
         terminal = put("vault_terminal", 15, 8, solid=True)
         self._look(terminal, "Vault checkout terminal", EVIDENCE_BY_ID["vault-ledger"]["found_text"], evidence="vault-ledger")
@@ -215,7 +219,8 @@ class World:
         camera = put("camera_console", 8, 5, solid=True)
         self._look(camera, "Gate camera terminal", EVIDENCE_BY_ID["gate-camera"]["found_text"], evidence="gate-camera")
 
-        self._npc_spot("doss", 15, 10)
+        # At his post by the checkout terminal, not blocking the doorway.
+        self._npc_spot("doss", 16, 6)
 
         # ---- Fort Callow: Command Office --------------------------------------
         put("desk", 51, 6, solid=True)
@@ -234,13 +239,19 @@ class World:
                    "The whole district under glass. Someone has pushed a single red pin "
                    "into Salt Row, down by the water, and left it there.")
 
-        self._npc_spot("ashworth", 51, 10)
+        # Behind her own desk — a battalion commander receives you, she doesn't
+        # meet you at the door.
+        self._npc_spot("ashworth", 52, 5)
 
         # ---- Third Precinct (home base) --------------------------------------
         put("desk", 31, 43, solid=True)
+        put("chair_up", 32, 45, solid=(3, 10, 10, 6))
+        put("desk", 35, 46, solid=True)
         row("bench", (26, 35), 45, solid=True)
         put("shelf", 25, 42, solid=True)
         put("shelf", 38, 42, solid=True)
+        put("cabinet", 34, 41, solid=True)
+        put("cooler", 24, 46, solid=True)
         put("banner", 36, 41, oy=4)
         board = put("corkboard", 26, 41, oy=4)
         self._look(board, "The case board",
@@ -257,6 +268,9 @@ class World:
         self._look(mess, "The kitchen", EVIDENCE_BY_ID["struggle-kitchen"]["found_text"], evidence="struggle-kitchen")
         put("shelf", 4, 32, solid=True)
         put("cooler", 10, 32, solid=True)
+        put("stove", 8, 32, solid=True)
+        put("table", 5, 39, solid=True)
+        put("chair", 9, 38, solid=(3, 10, 10, 6))
         put("sconce", 8, 30, oy=6)
         lamp(8, 31, 64)
 
@@ -271,14 +285,18 @@ class World:
         put("lamp", 14, 38, solid=(2, 24, 12, 6))
         lamp(14, 38, 68, oy=26)
 
-        self._npc_spot("bricker", 8, 43)  # loitering by the street, not inside
+        # Out on the street rather than in the hallway — he is not in this house,
+        # he is hanging around outside it.
+        self._npc_spot("bricker", 12, 44)
 
         # ---- Salt Row, Dock 4: the fishing cabin -------------------------------
-        put("table", 46, 33, solid=True)
-        put("chair", 48, 35, solid=(3, 10, 10, 6))
-        put("crate", 44, 37, solid=True)
+        put("table", 45, 33, solid=True)
+        put("chair", 47, 35, solid=(3, 10, 10, 6))
+        put("bunk", 44, 30, solid=True)
+        put("stove", 50, 31, solid=True)
+        lamp(50, 32, 52, oy=12)
         put("crate", 55, 37, solid=True)
-        put("pallet", 53, 32, solid=True)
+        put("pallet", 52, 38, solid=True)
         put("lamp", 45, 32, solid=(2, 24, 12, 6))
         lamp(45, 32, 74, oy=26)
         put("lamp", 55, 32, solid=(2, 24, 12, 6))
@@ -287,7 +305,8 @@ class World:
         for tx in (44, 47, 53, 56):
             put("bollard", tx, 41, solid=(3, 8, 6, 6))
 
-        self._npc_spot("thorne", 49, 36)
+        # Deep in the cabin, backed into the far corner away from the door.
+        self._npc_spot("thorne", 53, 35)
 
         # ---- Harborview Square (the roads between everything) ------------------
         put("fountain", 29, 20, solid=(4, 18, 40, 20))
