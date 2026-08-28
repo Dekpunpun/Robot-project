@@ -1302,6 +1302,32 @@ def obj_stove():
     return s
 
 
+def obj_truck():
+    """A two-and-a-half ton in its bay — the truck the gate camera caught
+    logging out after hours on all five nights."""
+    s = _surf(26, 40)
+    _box(s, (2, 12, 22, 26), (62, 70, 50), (84, 94, 66), (34, 38, 28))  # bed
+    for y in range(17, 36, 5):
+        pygame.draw.line(s, (44, 50, 36), (4, y), (21, y))  # slats
+    _box(s, (3, 0, 20, 13), (74, 84, 58), (98, 110, 76), (34, 38, 28))  # cab
+    pygame.draw.rect(s, (96, 122, 130), (6, 2, 14, 5))  # windshield
+    pygame.draw.rect(s, (132, 158, 164), (6, 2, 14, 1))
+    for wy in (7, 22, 30):
+        pygame.draw.rect(s, (28, 26, 26), (0, wy, 3, 6))
+        pygame.draw.rect(s, (28, 26, 26), (23, wy, 3, 6))
+    return s
+
+
+def obj_oil_drum():
+    s = _surf(12, 18)
+    _box(s, (1, 3, 10, 15), (104, 72, 44), (134, 96, 62), (52, 36, 22))
+    for y in (7, 12):
+        pygame.draw.rect(s, (52, 36, 22), (1, y, 10, 1))
+    pygame.draw.ellipse(s, (134, 96, 62), (1, 1, 10, 4))
+    pygame.draw.ellipse(s, (52, 36, 22), (1, 1, 10, 4), 1)
+    return s
+
+
 def build_objects():
     return {
         "plinth": obj_plinth(),
@@ -1351,6 +1377,8 @@ def build_objects():
         "bollard": obj_bollard(),
         "munitions_crate": obj_munitions_crate(),
         "weapon_rack": obj_weapon_rack(),
+        "truck": obj_truck(),
+        "oil_drum": obj_oil_drum(),
         "bunk": obj_bunk(),
         "stove": obj_stove(),
         **{f"marker{i}": obj_marker(i) for i in range(1, 6)},

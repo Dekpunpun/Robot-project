@@ -82,6 +82,8 @@ BUILDINGS = [
              corridor=(7, 41, 3, 5, "wood")),
     Building("saltrow", "SALT ROW, DOCK 4", "THE FISHING CABIN",
              rooms=[(43, 30, 14, 10, "wood")], corridor=(48, 40, 3, 5, "wood")),
+    Building("motorpool", "FORT CALLOW", "MOTOR POOL",
+             rooms=[(22, 3, 14, 9, "marble_d")], corridor=(25, 12, 3, 6, "marble_d")),
 ]
 
 
@@ -340,6 +342,23 @@ class World:
         # At his post by the checkout terminal, not blocking the doorway.
         self._npc_spot("doss", 16, 6)
 
+        # ---- Fort Callow: Motor Pool ------------------------------------------
+        # Bricker's shop, and where the truck from the gate footage is parked.
+        truck = put("truck", 31, 4, solid=(2, 20, 22, 18))
+        self._look(truck, "A 2.5-ton in the end bay",
+                   "Motor pool log says it has not moved in a week. The odometer says "
+                   "otherwise, and someone has wiped the bed out with solvent - it is "
+                   "the only clean thing in the building.")
+        put("workbench", 23, 9, solid=True)
+        put("shelf", 22, 4, solid=True)
+        for tx in (28, 30):
+            put("oil_drum", tx, 9, solid=(1, 8, 10, 7))
+        put("crate", 34, 9, solid=True)
+        put("pallet", 27, 4, solid=True)
+        for tx in (24, 29, 34):
+            put("sconce", tx, 3, oy=6)
+            lamp(tx, 4, 70)
+
         # ---- Fort Callow: Command Office --------------------------------------
         put("desk", 51, 6, solid=True)
         put("chair", 52, 8, solid=(3, 10, 10, 6))
@@ -429,7 +448,8 @@ class World:
         # ---- Harborview Square (the roads between everything) ------------------
         put("fountain", 29, 20, solid=(4, 18, 40, 20))
         row("bench", (26, 36), 26, solid=True)
-        for tx, ty in ((25, 19), (39, 19), (25, 25), (39, 25)):
+        # The upper pair sits inboard of the motor pool doorway at x25-27.
+        for tx, ty in ((29, 19), (37, 19), (25, 25), (39, 25)):
             put("plant", tx, ty, solid=True)
         for tx in (27, 33, 39):
             put("sconce", tx, 19, oy=8)
