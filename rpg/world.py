@@ -46,20 +46,36 @@ class World:
                     self.grid[ty][tx] = kind
 
     def _build(self):
+        self.zone_grid = [[None] * MAP_W for _ in range(MAP_H)]
+        self.zone_names = {
+            "vault": ("FORT CALLOW", "SPECIAL WEAPONS VAULT"),
+            "command": ("FORT CALLOW", "COMMAND OFFICE"),
+            "precinct": ("THIRD PRECINCT", "HOME BASE"),
+            "milner": ("14 MILNER STREET", "THE THORNE HOUSE"),
+            "saltrow": ("SALT ROW, DOCK 4", "THE FISHING CABIN"),
+        }
+
+        def zone_fill(x, y, w, h, kind, zone, over=None):
+            self._fill(x, y, w, h, kind, over)
+            for ty in range(y, y + h):
+                for tx in range(x, x + w):
+                    if 0 <= tx < MAP_W and 0 <= ty < MAP_H:
+                        self.zone_grid[ty][tx] = zone
+
         # Buildings.
-        self._fill(4, 3, 16, 9, "marble_d")  # Fort Callow - Special Weapons Vault
-        self._fill(44, 3, 16, 9, "carpet")  # Fort Callow - Command Office
-        self._fill(24, 40, 16, 8, "wood")  # Third Precinct
-        self._fill(4, 30, 9, 11, "wood")  # 14 Milner Street - kitchen
-        self._fill(13, 30, 8, 11, "marble_d")  # 14 Milner Street - garage
-        self._fill(43, 30, 14, 10, "wood")  # Salt Row - Dock 4, the fishing cabin
+        zone_fill(4, 3, 16, 9, "marble_d", "vault")  # Fort Callow - Special Weapons Vault
+        zone_fill(44, 3, 16, 9, "carpet", "command")  # Fort Callow - Command Office
+        zone_fill(24, 40, 16, 8, "wood", "precinct")  # Third Precinct
+        zone_fill(4, 30, 9, 11, "wood", "milner")  # 14 Milner Street - kitchen
+        zone_fill(13, 30, 8, 11, "marble_d", "milner")  # 14 Milner Street - garage
+        zone_fill(43, 30, 14, 10, "wood", "saltrow")  # Salt Row - Dock 4, the fishing cabin
 
         # Corridors — each pokes one building out to a doorway in the yard.
-        self._fill(10, 12, 3, 7, "marble_d")  # vault -> yard
-        self._fill(50, 12, 3, 7, "carpet")  # command office -> yard
-        self._fill(30, 34, 3, 6, "wood")  # precinct -> yard
-        self._fill(7, 41, 3, 5, "wood")  # Milner Street -> yard
-        self._fill(48, 40, 3, 5, "wood")  # Salt Row -> yard
+        zone_fill(10, 12, 3, 7, "marble_d", "vault")  # vault -> yard
+        zone_fill(50, 12, 3, 7, "carpet", "command")  # command office -> yard
+        zone_fill(30, 34, 3, 6, "wood", "precinct")  # precinct -> yard
+        zone_fill(7, 41, 3, 5, "wood", "milner")  # Milner Street -> yard
+        zone_fill(48, 40, 3, 5, "wood", "saltrow")  # Salt Row -> yard
 
         # Seal the city: any void touching a floor becomes wall.
         walls = []
@@ -295,6 +311,14 @@ class World:
             lamp(tx, ty, 74, oy=26)
 
     # --- queries -------------------------------------------------------------
+
+    def zone_at(self, x, y):
+        """Which building (if any) this world point falls inside — used to
+        fire the "entering a building" cutscene at the right doorway."""
+        tx, ty = int(x) // TILE, int(y) // TILE
+        if 0 <= tx < MAP_W and 0 <= ty < MAP_H:
+            return self.zone_grid[ty][tx]
+        return None
 
     def solid_at(self, rect):
         """True if this world rect overlaps a wall or a blocking prop."""

@@ -55,8 +55,12 @@ class Player:
 
     def draw(self, surf, camera):
         img = self.frames[self.facing][int(self.frame)]
+        # A one-pixel bounce on the mid-stride frames — the foot is planted
+        # and the shadow stays put, but the body lifts, which is what sells
+        # a walk cycle at four frames instead of reading as a shuffle.
+        bob = 1 if self.moving and int(self.frame) % 2 == 1 else 0
         x = int(self.x) - self.W // 2 - camera[0]
-        y = int(self.y) - self.H - camera[1]
+        y = int(self.y) - self.H - camera[1] - bob
         # A flat shadow so the sprite is planted on the floor rather than
         # floating above it.
         shadow = pygame.Surface((12, 5), pygame.SRCALPHA)
@@ -103,6 +107,9 @@ class NPC:
         # He breathes: a one-pixel bob, faster once he is rattled.
         rate = 34 if self.mood == "steady" else 16
         bob = 1 if (tick // rate) % 2 else 0
+        shadow = pygame.Surface((14, 6), pygame.SRCALPHA)
+        pygame.draw.ellipse(shadow, (0, 0, 0, 90), (0, 0, 14, 6))
+        surf.blit(shadow, (int(self.x) - 7 - camera[0], int(self.y) - 5 - camera[1]))
         surf.blit(
             img,
             (int(self.x) - img.get_width() // 2 - camera[0] + ox,

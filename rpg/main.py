@@ -6,7 +6,9 @@ Move with WASD or the arrow keys, E to look at things, TAB for the case file.
 Four people know something. Only one of them did it.
 """
 
+import math
 import os
+import random
 import sys
 import traceback
 
@@ -52,6 +54,16 @@ class Game:
 
         self.world = World()
         self.player = self._spawn_player()
+        self.minimap_base = self._build_minimap_base()
+        self.minimap_fog = pygame.Surface((MAP_W, MAP_H), pygame.SRCALPHA)
+        self.minimap_fog.fill((6, 6, 16, 255))
+        self.minimap_reveal = self._build_minimap_reveal_mask(6)
+        self._reveal_minimap()
+        self.dust_sprite = pygame.Surface((3, 3), pygame.SRCALPHA)
+        pygame.draw.circle(self.dust_sprite, (255, 226, 168, 150), (1, 1), 1)
+
+        self.zone_id = self.world.zone_at(self.player.x, self.player.y)
+        self.transition = None
 
         self.npcs = {}
         for sid, spot in self.world.npc_spots.items():
@@ -89,6 +101,7 @@ class Game:
             )
 
         self.scanlines = self.build_scanlines()
+        self.vignette = self.build_vignette()
         self.state = TITLE_SCREEN
         self.reset_run()
 
@@ -153,6 +166,102 @@ class Game:
         if radius not in self.lights:
             self.lights[radius] = art.make_light(radius)
         return self.lights[radius]
+
+    def _build_minimap_base(self):
+        """One pixel per tile, coloured by ground kind. Built once — the map
+        itself never changes, only how much of it the fog still hides."""
+        colours = {
+            "grass": GRASS, "hedge": HEDGE, "path": STONE_L, "wood": WOOD,
+            "marble_d": MARBLE_D, "carpet": CARPET, "wall": WALL_D, "void": NIGHT,
+        }
+        surf = pygame.Surface((MAP_W, MAP_H))
+        grid = self.world.grid
+        for y in range(MAP_H):
+            row = grid[y]
+            for x in range(MAP_W):
+                surf.set_at((x, y), colours.get(row[x], NIGHT))
+        return surf
+
+    def _build_minimap_reveal_mask(self, radius):
+        """`art.make_light`'s falloff is tuned for room-sized lamps — at a
+        radius this small it never reaches full alpha at its own centre, so
+        the minimap here gets its own mask, solid through the middle with a
+        soft rim, guaranteed to fully clear the fog at the point stood on."""
+        size = radius * 2
+        s = pygame.Surface((size, size), pygame.SRCALPHA)
+        for y in range(size):
+            for x in range(size):
+                d = ((x - radius + 0.5) ** 2 + (y - radius + 0.5) ** 2) ** 0.5
+                if d > radius:
+                    continue
+                t = max(0.0, (d - radius * 0.55) / (radius * 0.45))
+                s.set_at((x, y), (0, 0, 0, int(255 * (1 - min(1.0, t)))))
+        return s
+
+    def _reveal_minimap(self):
+        """Punch a permanent hole in the fog around wherever the player is
+        standing right now. Subtracting alpha only ever removes fog, so
+        ground once seen stays visible — ordinary fog-of-war."""
+        r = self.minimap_reveal.get_width() // 2
+        mx = int(self.player.x / TILE)
+        my = int(self.player.y / TILE)
+        self.minimap_fog.blit(self.minimap_reveal, (mx - r, my - r), special_flags=pygame.BLEND_RGBA_SUB)
+
+    def draw_minimap(self):
+        composite = self.minimap_base.copy()
+        composite.blit(self.minimap_fog, (0, 0))
+        for npc in self.npcs.values():
+            mx, my = int(npc.x / TILE), int(npc.y / TILE)
+            if 0 <= mx < MAP_W and 0 <= my < MAP_H and self.minimap_fog.get_at((mx, my))[3] < 120:
+                composite.set_at((mx, my), DANGER)
+        px, py = int(self.player.x / TILE), int(self.player.y / TILE)
+        if 0 <= px < MAP_W and 0 <= py < MAP_H:
+            composite.set_at((px, py), ACCENT)
+        ui.panel(self.scene, (6, 6, MAP_W + 6, MAP_H + 6), UI_BG, UI_LINE)
+        self.scene.blit(composite, (9, 9))
+
+    # -- entering a building ---------------------------------------------
+
+    TRANSITION_DURATIONS = {"out": 0.35, "hold": 1.1, "in": 0.35}
+
+    def start_transition(self, zone_id):
+        self.transition = {"zone": zone_id, "phase": "out", "t": 0.0}
+        sfx.play("open")
+
+    def _update_transition(self, dt):
+        tr = self.transition
+        tr["t"] += dt
+        if tr["t"] < self.TRANSITION_DURATIONS[tr["phase"]]:
+            return
+        tr["t"] = 0.0
+        nxt = {"out": "hold", "hold": "in", "in": None}[tr["phase"]]
+        if nxt is None:
+            self.transition = None
+        else:
+            tr["phase"] = nxt
+
+    def draw_transition(self):
+        tr = self.transition
+        dur = self.TRANSITION_DURATIONS[tr["phase"]]
+        frac = min(1.0, tr["t"] / dur)
+        if tr["phase"] == "out":
+            alpha = int(255 * frac)
+        elif tr["phase"] == "hold":
+            alpha = 255
+        else:
+            alpha = int(255 * (1 - frac))
+        overlay = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        overlay.fill((6, 6, 14, alpha))
+        self.scene.blit(overlay, (0, 0))
+        if alpha > 160:
+            name, subtitle = self.world.zone_names[tr["zone"]]
+            big = ui.font(14)
+            w = big.size(name)[0]
+            y = SCREEN_H // 2 - 14
+            self.scene.blit(big.render(name, False, INK), (SCREEN_W // 2 - w // 2 + 2, y + 2))
+            self.scene.blit(big.render(name, False, ACCENT), (SCREEN_W // 2 - w // 2, y))
+            sw = ui.text_w(subtitle)
+            ui.text(self.scene, subtitle, SCREEN_W // 2 - sw // 2, y + 20, UI_DIM)
 
     def available_evidence(self):
         return [EVIDENCE_BY_ID[e] for e in self.found]
@@ -356,6 +465,8 @@ class Game:
             if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.reset_run()
                 self.player = self._spawn_player()
+                self.zone_id = self.world.zone_at(self.player.x, self.player.y)
+                self.transition = None
                 self.state = TITLE_SCREEN
             elif e.key == pygame.K_ESCAPE:
                 self.quit()
@@ -384,6 +495,8 @@ class Game:
             return
 
         # -- walking around
+        if self.transition:
+            return
         if self.box.active:
             if e.key in (pygame.K_e, pygame.K_SPACE, pygame.K_RETURN, pygame.K_KP_ENTER):
                 self.box.advance()
@@ -490,6 +603,7 @@ class Game:
         flags = pygame.FULLSCREEN | pygame.SCALED if self.fullscreen else 0
         self.screen = pygame.display.set_mode((SCREEN_W * SCALE, SCREEN_H * SCALE), flags)
         self.scanlines = self.build_scanlines()
+        self.vignette = self.build_vignette()
 
     def quit(self):
         pygame.quit()
@@ -508,6 +622,11 @@ class Game:
         if result:
             self.receive(*result)
 
+        if self.transition:
+            self._update_transition(dt)
+            self.player.moving = False
+            return
+
         if self.state != PLAYING or self.box.active:
             self.player.moving = False
             return
@@ -520,6 +639,13 @@ class Game:
         self.player.update(dt, dx, dy, self.world, running)
         if self.player.moving and int(self.player.frame) != was and int(self.player.frame) % 2 == 1:
             sfx.play("step")
+        if self.player.moving:
+            self._reveal_minimap()
+            new_zone = self.world.zone_at(self.player.x, self.player.y)
+            if new_zone != self.zone_id:
+                if new_zone is not None:
+                    self.start_transition(new_zone)
+                self.zone_id = new_zone
 
     # -- draw ----------------------------------------------------------------
 
@@ -554,12 +680,33 @@ class Game:
         # Night, punched through by every lamp in range.
         dark = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         dark.fill((10, 12, 30, 132))
+        t = self.tick / 60.0
         for lx, ly, r in self.world.lights:
             if abs(lx - cam[0] - SCREEN_W // 2) > SCREEN_W // 2 + r:
                 continue
             if abs(ly - cam[1] - SCREEN_H // 2) > SCREEN_H // 2 + r:
                 continue
-            dark.blit(self.light(r), (lx - r - cam[0], ly - r - cam[1]), special_flags=pygame.BLEND_RGBA_SUB)
+            # A gentle, never-quite-steady flicker — each lamp gets its own
+            # phase from its position, so a whole street doesn't pulse in
+            # lockstep like one broken bulb.
+            phase = ((lx * 7 + ly * 13) % 97) / 97.0 * math.tau
+            wobble = math.sin(self.tick * 0.05 + phase) + 0.4 * math.sin(self.tick * 0.11 + phase * 2)
+            rr = r + (2 if wobble > 0.5 else -2 if wobble < -0.5 else 0)
+            dark.blit(self.light(rr), (lx - rr - cam[0], ly - rr - cam[1]), special_flags=pygame.BLEND_RGBA_SUB)
+
+            # Dust, backlit by the lamp, drifting up out of its pool of light.
+            rng = random.Random(int(lx) * 92821 + int(ly))
+            for _ in range(4):
+                mphase = rng.uniform(0, math.tau)
+                speed = rng.uniform(5, 10)
+                cycle = r * 1.1
+                y_off = r * 0.5 - (t * speed + mphase * 6) % cycle
+                x_off = rng.uniform(-r * 0.45, r * 0.45) + math.sin(t * 0.7 + mphase) * 3
+                dark.blit(
+                    self.dust_sprite,
+                    (int(lx + x_off - cam[0]) - 1, int(ly + y_off - cam[1]) - 1),
+                    special_flags=pygame.BLEND_RGBA_ADD,
+                )
         dark.blit(
             self.light(40),
             (int(self.player.x) - 40 - cam[0], int(self.player.y) - 48 - cam[1]),
@@ -569,9 +716,7 @@ class Game:
 
     def draw_hud(self):
         s = self.scene
-        found, total = len(self.found), len(CASE["evidence"])
-        ui.panel(s, (6, 6, 96, 14), UI_BG, UI_LINE)
-        ui.text(s, f"EVIDENCE {found}/{total}", 12, 9, ACCENT if found < total else GREEN)
+        self.draw_minimap()
 
         if self.state == PLAYING and not self.box.active:
             t = self.world.interactable_near((self.player.x, self.player.y - 8))
@@ -790,6 +935,8 @@ class Game:
                 self.draw_hud()
                 self.box.draw(self.scene, self.tick)
             self.toast.draw(self.scene)
+            if self.transition:
+                self.draw_transition()
 
         # `scene` inherits the real display's pixel format, which on this
         # Mac's window includes a genuine per-pixel alpha byte. Blitting any
@@ -816,6 +963,7 @@ class Game:
         # Scanlines go on after the upscale, so they stay one screen pixel
         # thick however far the window is blown up.
         self.screen.blit(self.scanlines, (0, 0))
+        self.screen.blit(self.vignette, (0, 0))
 
         if DEBUG and self.tick % 60 == 0:
             pygame.image.save(self.screen, os.path.join(DEBUG_DIR, f"{self.tick:06d}_screen.png"))
@@ -829,6 +977,24 @@ class Game:
         for y in range(0, h, 3):
             pygame.draw.line(s, (0, 0, 0, 46), (0, y), (w, y))
         return s
+
+    def build_vignette(self):
+        """A soft noir frame around the edges. Built small and scaled up —
+        walking the full screen resolution pixel-by-pixel in Python would be
+        far too slow for something drawn once at startup."""
+        w, h = self.screen.get_size()
+        sw, sh = max(64, w // 6), max(40, h // 6)
+        small = pygame.Surface((sw, sh), pygame.SRCALPHA)
+        cx, cy = sw / 2, sh / 2
+        for y in range(sh):
+            ny = (y - cy) / cy
+            for x in range(sw):
+                nx = (x - cx) / cx
+                d = (nx * nx + ny * ny) ** 0.5
+                a = int((d - 0.55) * 220)
+                if a > 0:
+                    small.set_at((x, y), (6, 6, 16, min(160, a)))
+        return pygame.transform.smoothscale(small, (w, h))
 
     # -- loop ----------------------------------------------------------------
 

@@ -69,7 +69,7 @@ DET = {
 DET_DOWN = [
     "................",
     ".....______.....",
-    "...._HHHHHH_....",
+    "...._HHhhHH_....",
     "...._HhhhhH_....",
     "...._HHHHHH_....",
     ".._HHHHHHHHHH_..",
@@ -82,9 +82,9 @@ DET_DOWN = [
     "....._ssss_.....",
     "....._tttt_.....",
     ".._cccccccccc_..",
-    ".._ccckttkccc_..",
-    ".._ccckttkccc_..",
-    ".._ccckttkccc_..",
+    ".._ccckttkcck_..",
+    ".._ccckttkcck_..",
+    ".._ccckttkcck_..",
     ".._CcckttkccC_..",
     ".._CCCCCCCCCC_..",
 ]
@@ -92,7 +92,7 @@ DET_DOWN = [
 DET_UP = [
     "................",
     ".....______.....",
-    "...._HHHHHH_....",
+    "...._HHhhHH_....",
     "...._HhhhhH_....",
     "...._HHHHHH_....",
     ".._HHHHHHHHHH_..",
@@ -105,9 +105,9 @@ DET_UP = [
     "....._ssss_.....",
     "....._cccc_.....",
     ".._cccccccccc_..",
-    ".._ccccCCcccc_..",
-    ".._ccccCCcccc_..",
-    ".._ccccCCcccc_..",
+    ".._ccccCCccck_..",
+    ".._ccccCCccck_..",
+    ".._ccccCCccck_..",
     ".._CcccCCcccC_..",
     ".._CCCCCCCCCC_..",
 ]
@@ -278,6 +278,46 @@ BRICKER = {
 }
 BRICKER_STANDING = _standing(DET_DOWN, BRICKER)
 BRICKER_SHAKEN = _standing(DET_UP, BRICKER)
+
+def _mark(surf, pixels):
+    """Stamp a few extra pixels onto a built sprite — small insignia and
+    wear that make four recolours of the same body read as four people."""
+    for x, y, colour in pixels:
+        surf.set_at((x, y), colour)
+    return surf
+
+
+# Sergeant's chevrons on the sleeve — rank, not just a uniform colour.
+_mark(THORNE_STANDING, [
+    (2, 15, (196, 190, 150)), (3, 16, (196, 190, 150)), (2, 17, (196, 190, 150)),
+])
+_mark(THORNE_BROKEN, [
+    (2, 15, (196, 190, 150)), (3, 16, (196, 190, 150)), (2, 17, (196, 190, 150)),
+])
+
+# A wrench hooked on the belt — the vault NCO who signs for the tools.
+_mark(DOSS_STANDING, [
+    (11, 18, (176, 176, 184)), (12, 18, (176, 176, 184)), (12, 19, (140, 140, 148)),
+])
+_mark(DOSS_OPEN, [
+    (11, 18, (176, 176, 184)), (12, 18, (176, 176, 184)), (12, 19, (140, 140, 148)),
+])
+
+# A colonel's shoulder star — gold, unmissable next to two corporals.
+_mark(ASHWORTH_STANDING, [
+    (10, 14, BRASS), (11, 14, BRASS), (10, 15, BRASS_D),
+])
+_mark(ASHWORTH_OPEN, [
+    (10, 14, BRASS), (11, 14, BRASS), (10, 15, BRASS_D),
+])
+
+# Grease on the coat — a motor pool mechanic never quite gets clean.
+_mark(BRICKER_STANDING, [
+    (7, 17, (64, 46, 28)), (8, 18, (64, 46, 28)), (6, 18, (82, 60, 36)),
+])
+_mark(BRICKER_SHAKEN, [
+    (7, 15, (64, 46, 28)), (8, 16, (64, 46, 28)), (6, 16, (82, 60, 36)),
+])
 
 NPC_ART = {
     "thorne": (THORNE_STANDING, THORNE_BROKEN),
