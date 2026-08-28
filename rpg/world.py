@@ -15,8 +15,8 @@ from settings import *
 MAP_W, MAP_H = 64, 54
 
 # Floors you can stand on. Everything else stops you.
-WALKABLE = {"marble_d", "wood", "carpet", "path", "grass"}
-INTERIOR = {"marble_d", "wood", "carpet"}
+WALKABLE = {"marble_d", "wood", "carpet", "path", "grass", "concrete", "labfloor"}
+INTERIOR = {"marble_d", "wood", "carpet", "concrete", "labfloor"}
 
 
 class Building:
@@ -73,7 +73,7 @@ class Building:
 
 BUILDINGS = [
     Building("vault", "FORT CALLOW", "SPECIAL WEAPONS VAULT",
-             rooms=[(4, 3, 16, 9, "marble_d")], corridor=(10, 12, 3, 7, "marble_d"),
+             rooms=[(4, 3, 16, 9, "concrete")], corridor=(10, 12, 3, 7, "concrete"),
              style="military"),
     Building("command", "FORT CALLOW", "COMMAND OFFICE",
              rooms=[(44, 3, 16, 9, "carpet")], corridor=(50, 12, 3, 7, "carpet"),
@@ -90,8 +90,11 @@ BUILDINGS = [
     # Held two tiles clear of the vault: with the wall shell included, roofs
     # that abut read as one long slab instead of three separate buildings.
     Building("motorpool", "FORT CALLOW", "MOTOR POOL",
-             rooms=[(24, 3, 14, 9, "marble_d")], corridor=(26, 12, 3, 6, "marble_d"),
+             rooms=[(24, 3, 14, 9, "concrete")], corridor=(26, 12, 3, 6, "concrete"),
              style="military"),
+    Building("lab", "HARROW'S REACH P.D.", "FORENSICS",
+             rooms=[(43, 24, 5, 3, "labfloor")], corridor=(44, 22, 3, 2, "labfloor"),
+             style="lab"),
 ]
 
 
@@ -476,17 +479,18 @@ class World:
                 put(key, tx, ty, **kw)
 
         # ---- Fort Callow: Special Weapons Vault ------------------------------
-        row("shelf", (5, 5), 4, solid=True)
-        put("shelf", 5, 7, solid=True)
-        put("cabinet", 18, 4, solid=True)
-        put("cabinet", 18, 7, solid=True)
-        put("crate", 6, 10, solid=True)
-        put("crate", 8, 10, solid=True)
+        # An armoury, not a study: steel racking and locked cabinets, no
+        # bookshelves and no reading lamps.
+        put("steel_shelf", 5, 4, solid=True)
+        put("steel_shelf", 5, 7, solid=True)
+        put("gun_locker", 18, 4, solid=True)
+        put("gun_locker", 18, 7, solid=True)
+        put("ammo_crate", 6, 10, solid=True)
+        put("ammo_crate", 8, 10, solid=True)
+        put("sandbags", 16, 10, solid=(2, 4, 16, 7))
         for tx in (7, 12, 17):
             put("sconce", tx, 3, oy=6)
             lamp(tx, 4, 70)
-        put("lamp", 6, 9, solid=(2, 24, 12, 6))
-        lamp(6, 9, 74, oy=26)
 
         put("munitions_crate", 12, 10, solid=True)
         put("munitions_crate", 14, 4, solid=True)
@@ -505,6 +509,20 @@ class World:
 
         # At his post by the checkout terminal, not blocking the doorway.
         self._npc_spot("doss", 16, 6)
+
+        # ---- Harrow's Reach P.D.: Forensics -----------------------------------
+        bench = put("lab_bench", 43, 25, solid=True)
+        self._look(bench, "The forensics bench",
+                   "Someone has been working the matchbook mark against the Compact's "
+                   "last two jobs. The comparison is pinned up half-finished, and the "
+                   "burner is still lit.")
+        # The room is three rows deep — the roof has to clear the command
+        # office above it and Salt Row below — so it gets the three fittings
+        # that say "lab" and no more.
+        put("specimen_cabinet", 43, 24, solid=True)
+        put("microscope", 46, 26, pad=-4)
+        put("sconce", 45, 24, oy=4)
+        lamp(45, 25, 62)
 
         # ---- Fort Callow: Motor Pool ------------------------------------------
         # Bricker's shop, and where the truck from the gate footage is parked.
@@ -649,7 +667,7 @@ class World:
         # Utility poles down both sides of the spine, with the wires strung
         # between them. Kept off the roadway so nothing blocks a crossing.
         self.wires = []
-        for row, xs in ((17, (14, 21, 36, 45)), (21, (14, 21, 36, 45))):
+        for row, xs in ((17, (14, 21, 36, 45)), (21, (14, 21, 36, 41))):
             last = None
             for tx in xs:
                 put("pole", tx, row, solid=(3, 30, 4, 5))
@@ -658,7 +676,7 @@ class World:
                     self.wires.append((last, top))
                 last = top
 
-        for tx, ty in ((13, 21), (35, 17), (46, 21)):
+        for tx, ty in ((13, 21), (35, 17), (40, 21)):
             put("bin", tx, ty, solid=(1, 8, 10, 6))
         for tx, ty in ((20, 19), (33, 26), (44, 19)):
             put("drain", tx, ty)

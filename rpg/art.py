@@ -688,6 +688,12 @@ ROOF_STYLES = {
         eave=(32, 38, 34), trim=(42, 48, 42), chimney=True,
         wall=(100, 96, 84), wall_d=(66, 64, 56), wall_l=(126, 122, 106),
         course="board"),
+    # Institutional: pale rendered walls and a low grey roof with vents.
+    "lab": dict(
+        back=(74, 84, 86), front=(100, 112, 112), cap=(134, 148, 146),
+        eave=(40, 46, 48), trim=(56, 64, 66), vents=True,
+        wall=(168, 172, 166), wall_d=(120, 124, 120), wall_l=(198, 202, 194),
+        course="block"),
 }
 
 
@@ -764,6 +770,119 @@ def build_roof_tiles(style):
         "back": [roof_tile(p["back"], p["trim"], i) for i in range(3)],
         "front": [roof_tile(p["front"], p["cap"], i + 7) for i in range(3)],
     }
+
+
+def obj_steel_shelf():
+    """Industrial racking. The armoury's version of a bookshelf, which is to
+    say: no books, no wood, and everything on it is in a box with a number."""
+    s = _surf(16, 26)
+    _box(s, (0, 0, 16, 26), (72, 76, 78), (98, 102, 104), INK)
+    for shelf_y in (2, 10, 18):
+        pygame.draw.rect(s, (56, 60, 62), (1, shelf_y, 14, 6))
+        x = 2
+        while x < 14:
+            bw = 3 if x % 2 else 4
+            pygame.draw.rect(s, (86, 88, 78), (x, shelf_y + 1, bw, 5))
+            pygame.draw.rect(s, (140, 142, 128), (x, shelf_y + 2, bw, 1))
+            x += bw + 1
+        pygame.draw.rect(s, (108, 112, 114), (1, shelf_y + 6, 14, 1))
+    for x in (0, 15):  # uprights
+        pygame.draw.rect(s, (52, 56, 58), (x, 0, 1, 26))
+    return s
+
+
+def obj_gun_locker():
+    """A locked steel cabinet, chained and signed for."""
+    s = _surf(14, 26)
+    _box(s, (0, 0, 14, 26), (66, 70, 74), (94, 98, 102), INK)
+    pygame.draw.rect(s, (52, 56, 60), (1, 2, 5, 22))
+    pygame.draw.rect(s, (52, 56, 60), (8, 2, 5, 22))
+    pygame.draw.rect(s, (120, 124, 128), (6, 2, 2, 22))  # centre seam
+    pygame.draw.rect(s, (156, 148, 96), (5, 12, 4, 3))  # hasp
+    pygame.draw.rect(s, (36, 38, 40), (6, 15, 2, 3))  # padlock
+    for y in (5, 20):
+        pygame.draw.rect(s, (172, 168, 150), (2, y, 3, 1))  # stencilled number
+    return s
+
+
+def obj_ammo_crate():
+    """Stacked ammunition boxes, stencilled and banded."""
+    s = _surf(18, 16)
+    _box(s, (0, 7, 18, 9), (78, 72, 50), (100, 94, 66), (44, 40, 28))
+    _box(s, (2, 0, 14, 8), (86, 80, 56), (108, 102, 72), (44, 40, 28))
+    for bx in (5, 11):
+        pygame.draw.rect(s, (52, 48, 34), (bx, 0, 1, 8))
+        pygame.draw.rect(s, (52, 48, 34), (bx - 1, 7, 1, 9))
+    pygame.draw.rect(s, (188, 182, 150), (4, 3, 8, 2))  # stencil block
+    pygame.draw.rect(s, (188, 182, 150), (3, 10, 6, 1))
+    return s
+
+
+def obj_sandbags():
+    s = _surf(20, 12)
+    rng = random.Random(41)
+    for row, y in enumerate((5, 0)):
+        x = 0 if row % 2 == 0 else 4
+        while x < 20:
+            c = rng.choice(((122, 112, 84), (108, 98, 72), (134, 124, 94)))
+            pygame.draw.ellipse(s, c, (x, y, 9, 7))
+            pygame.draw.ellipse(s, (66, 60, 44), (x, y, 9, 7), 1)
+            x += 8
+    return s
+
+
+def obj_lab_bench():
+    """A forensics bench: black top, glassware, a burner, a specimen tray."""
+    s = _surf(32, 20)
+    _box(s, (0, 4, 32, 10), (48, 52, 56), (78, 84, 88), INK)
+    pygame.draw.rect(s, (206, 212, 210), (0, 12, 32, 2))  # enamel apron
+    pygame.draw.rect(s, (150, 158, 156), (2, 14, 6, 6))
+    pygame.draw.rect(s, (150, 158, 156), (24, 14, 6, 6))
+    for gx, col in ((4, (176, 206, 200)), (9, (196, 214, 180)), (14, (188, 168, 206))):
+        pygame.draw.rect(s, col, (gx, 0, 3, 5))  # flasks
+        pygame.draw.rect(s, INK, (gx, 0, 3, 5), 1)
+        pygame.draw.rect(s, (226, 232, 230), (gx, 0, 3, 1))
+    pygame.draw.rect(s, (62, 66, 70), (21, 1, 5, 4))  # burner
+    pygame.draw.rect(s, (108, 168, 214), (22, 0, 3, 2))  # flame
+    return s
+
+
+def obj_microscope():
+    s = _surf(12, 18)
+    _box(s, (2, 12, 8, 6), (58, 62, 66), (88, 92, 96), INK)
+    pygame.draw.rect(s, (72, 76, 80), (5, 3, 3, 10))
+    pygame.draw.rect(s, (96, 100, 104), (3, 1, 6, 3))  # eyepiece
+    pygame.draw.rect(s, (188, 214, 216), (3, 10, 6, 1))  # slide
+    return s
+
+
+def obj_specimen_cabinet():
+    """Glass-fronted, everything inside bagged and tagged."""
+    s = _surf(16, 26)
+    _box(s, (0, 0, 16, 26), (196, 200, 198), (222, 226, 222), INK)
+    pygame.draw.rect(s, (130, 156, 158), (2, 2, 12, 22))
+    rng = random.Random(43)
+    for y in (3, 11, 19):
+        pygame.draw.rect(s, (168, 186, 186), (2, y + 6, 12, 1))
+        x = 3
+        while x < 13:
+            w = rng.choice((2, 3))
+            pygame.draw.rect(s, (214, 210, 190), (x, y, w, 6))
+            pygame.draw.rect(s, (176, 60, 56), (x, y, w, 1))  # evidence seal
+            x += w + 1
+    pygame.draw.rect(s, (150, 154, 152), (7, 2, 1, 22))
+    return s
+
+
+def obj_fume_hood():
+    s = _surf(24, 24)
+    _box(s, (0, 0, 24, 24), (188, 192, 190), (216, 220, 216), INK)
+    pygame.draw.rect(s, (58, 66, 70), (2, 4, 20, 14))
+    pygame.draw.rect(s, (120, 150, 156), (3, 5, 18, 8))  # sash glass
+    pygame.draw.rect(s, (162, 190, 194), (3, 5, 18, 2))
+    pygame.draw.rect(s, (146, 150, 148), (2, 2, 20, 2))
+    pygame.draw.rect(s, (92, 96, 94), (10, 18, 4, 6))
+    return s
 
 
 def obj_pole():
@@ -843,6 +962,34 @@ def obj_roof_sign(label_seed=0):
     return s
 
 
+def tile_concrete(seed):
+    """Poured slab — an armoury and a motor pool have floors you can drop a
+    crate on, not marble."""
+    rng = random.Random(seed)
+    s = pygame.Surface((TILE, TILE))
+    s.fill((98, 96, 92))
+    _speckle(s, rng, [(86, 84, 80), (114, 112, 106)], 34)
+    pygame.draw.line(s, (82, 80, 76), (0, 0), (TILE - 1, 0))
+    pygame.draw.line(s, (82, 80, 76), (0, 0), (0, TILE - 1))
+    if rng.random() < 0.3:  # oil, ground in and never coming out
+        ox, oy = rng.randrange(2, 10), rng.randrange(2, 10)
+        pygame.draw.ellipse(s, (74, 72, 70), (ox, oy, 5, 4))
+    return s
+
+
+def tile_labfloor(seed):
+    """Small sealed tile, the kind you can hose down."""
+    rng = random.Random(seed)
+    s = pygame.Surface((TILE, TILE))
+    s.fill((150, 162, 158))
+    for y in (0, 8):
+        for x in (0, 8):
+            pygame.draw.rect(s, (176, 188, 182), (x + 1, y + 1, 6, 6))
+            pygame.draw.line(s, (196, 206, 200), (x + 1, y + 1), (x + 6, y + 1))
+    _speckle(s, rng, [(164, 176, 170)], 5)
+    return s
+
+
 def tile_void():
     s = pygame.Surface((TILE, TILE))
     s.fill(NIGHT)
@@ -881,6 +1028,8 @@ def build_tiles():
     t["wall"] = [tile_wall_face(i) for i in range(3)]
     t["wall_top"] = [tile_wall_top(i) for i in range(3)]
     t["wainscot"] = [tile_wainscot(i) for i in range(3)]
+    t["concrete"] = [tile_concrete(i) for i in range(4)]
+    t["labfloor"] = [tile_labfloor(i) for i in range(3)]
     t["hedge"] = [tile_hedge(i) for i in range(3)]
     t["water"] = [tile_water(i) for i in range(3)]
     t["void"] = [tile_void()]
@@ -1549,6 +1698,14 @@ def build_objects():
         "truck": obj_truck(),
         "oil_drum": obj_oil_drum(),
         "chimney": obj_chimney(),
+        "steel_shelf": obj_steel_shelf(),
+        "gun_locker": obj_gun_locker(),
+        "ammo_crate": obj_ammo_crate(),
+        "sandbags": obj_sandbags(),
+        "lab_bench": obj_lab_bench(),
+        "microscope": obj_microscope(),
+        "specimen_cabinet": obj_specimen_cabinet(),
+        "fume_hood": obj_fume_hood(),
         "pole": obj_pole(),
         "bin": obj_bin(),
         "drain": obj_drain(),
