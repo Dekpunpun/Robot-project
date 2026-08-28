@@ -670,17 +670,76 @@ def tile_wainscot(seed):
 ROOF_STYLES = {
     "military": dict(
         back=(66, 72, 66), front=(90, 98, 88), cap=(122, 132, 118),
-        eave=(34, 38, 36), trim=(48, 54, 50), vents=True),
+        eave=(34, 38, 36), trim=(48, 54, 50), vents=True,
+        wall=(104, 108, 100), wall_d=(68, 72, 66), wall_l=(132, 136, 126),
+        course="block"),
     "civic": dict(
         back=(92, 46, 42), front=(124, 64, 54), cap=(160, 88, 72),
-        eave=(52, 26, 24), trim=(70, 34, 30), sign=True),
+        eave=(52, 26, 24), trim=(70, 34, 30), sign=True,
+        wall=(116, 76, 64), wall_d=(78, 48, 40), wall_l=(146, 100, 84),
+        course="brick"),
     "house": dict(
         back=(66, 50, 44), front=(92, 70, 56), cap=(122, 94, 72),
-        eave=(40, 30, 26), trim=(52, 38, 32), chimney=True),
+        eave=(40, 30, 26), trim=(52, 38, 32), chimney=True,
+        wall=(126, 100, 74), wall_d=(84, 66, 48), wall_l=(154, 126, 96),
+        course="board"),
     "cabin": dict(
         back=(52, 60, 54), front=(72, 82, 70), cap=(96, 108, 92),
-        eave=(32, 38, 34), trim=(42, 48, 42), chimney=True),
+        eave=(32, 38, 34), trim=(42, 48, 42), chimney=True,
+        wall=(100, 96, 84), wall_d=(66, 64, 56), wall_l=(126, 122, 106),
+        course="board"),
 }
+
+
+def facade_tile(style, seed):
+    """One tile of the front wall a building shows the camera. A roof alone
+    reads as paper laid on the ground; the wall under it is what gives the
+    building a front."""
+    p = ROOF_STYLES[style]
+    rng = random.Random(seed)
+    s = pygame.Surface((TILE, TILE))
+    s.fill(p["wall"])
+    if p["course"] == "brick":
+        for i, y in enumerate(range(0, TILE, 4)):
+            x = 0 if i % 2 == 0 else -4
+            while x < TILE:
+                pygame.draw.rect(s, p["wall_l"], (x + 1, y + 1, 6, 2))
+                x += 8
+    elif p["course"] == "block":
+        for y in range(0, TILE, 6):
+            pygame.draw.line(s, p["wall_d"], (0, y), (TILE - 1, y))
+        for x in range(0, TILE, 8):
+            pygame.draw.line(s, p["wall_d"], (x, 0), (x, TILE - 1))
+    else:  # board — horizontal siding
+        for y in range(0, TILE, 3):
+            pygame.draw.line(s, p["wall_d"], (0, y + 2), (TILE - 1, y + 2))
+            pygame.draw.line(s, p["wall_l"], (0, y), (TILE - 1, y))
+    _speckle(s, rng, [p["wall_d"], p["wall_l"]], 6)
+    return s
+
+
+def obj_facade_window(style):
+    """A lit window. Every one of these is somebody still awake at 2am."""
+    p = ROOF_STYLES[style]
+    s = _surf(12, 12)
+    _box(s, (0, 0, 12, 12), (46, 40, 36), p["wall_l"], INK)
+    pygame.draw.rect(s, LAMP, (2, 2, 8, 8))
+    pygame.draw.rect(s, GLOW, (2, 2, 8, 3))
+    pygame.draw.line(s, (58, 48, 34), (6, 2), (6, 9))
+    pygame.draw.line(s, (58, 48, 34), (2, 6), (9, 6))
+    return s
+
+
+def obj_facade_door(style):
+    p = ROOF_STYLES[style]
+    s = _surf(14, 20)
+    _box(s, (0, 0, 14, 20), (62, 44, 32), (86, 62, 44), INK)
+    pygame.draw.rect(s, (44, 32, 24), (2, 3, 10, 15))
+    for y in (5, 12):
+        pygame.draw.rect(s, (78, 56, 40), (3, y, 8, 5))
+    pygame.draw.rect(s, BRASS, (10, 11, 2, 2))  # handle
+    pygame.draw.rect(s, p["wall_l"], (0, 0, 14, 1))  # lintel
+    return s
 
 
 def roof_tile(base, light, seed):
@@ -1449,6 +1508,8 @@ def build_objects():
         "truck": obj_truck(),
         "oil_drum": obj_oil_drum(),
         "chimney": obj_chimney(),
+        **{f"window_{s}": obj_facade_window(s) for s in ROOF_STYLES},
+        **{f"door_{s}": obj_facade_door(s) for s in ROOF_STYLES},
         "roof_vent": obj_roof_vent(),
         "roof_sign": obj_roof_sign(),
         "bunk": obj_bunk(),

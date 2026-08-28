@@ -264,6 +264,22 @@ class World:
 
     # Overhang below the eave, where the roof throws a shadow onto the ground.
     EAVE_DROP = 5
+    # How many rows at the bottom of a building are wall rather than roof.
+    FACADE_ROWS = 2
+
+    def _dress_facade(self, building, surf, tx, px, wall_top, wall_bottom, door_cols):
+        """One door at the middle of the entrance, windows along the rest.
+
+        Every door column getting a door gave the house three front doors in
+        a row, so the door goes on the centre column only and the flanking
+        ones stay blank wall rather than falling through to a window.
+        """
+        props = art.objects()
+        if tx in door_cols:
+            if tx == sorted(door_cols)[len(door_cols) // 2]:
+                surf.blit(props[f"door_{building.style}"], (px + 1, wall_bottom - 22))
+        elif tx % 3 == 1:
+            surf.blit(props[f"window_{building.style}"], (px + 2, wall_top + 8))
 
     def _bake_exterior(self, building, tiles):
         """Draw one building as a pitched structure rather than a flat lid.
@@ -276,6 +292,7 @@ class World:
         """
         pal = art.ROOF_STYLES[building.style]
         shingles = art.build_roof_tiles(building.style)
+        self._facade = [art.facade_tile(building.style, i) for i in range(3)]
         x0 = min(t[0] for t in tiles)
         y0 = min(t[1] for t in tiles)
         w = max(t[0] for t in tiles) - x0 + 1
@@ -293,12 +310,18 @@ class World:
             shadow.fill((0, 0, 0, 96), (px + 2, (max(ys) - y0 + 1) * TILE, TILE, self.EAVE_DROP))
         surf.blit(shadow, (0, 0))
 
+        door_cols = {x for x, _ in building.door_tiles}
         for x, ys in cols.items():
             top, bottom = min(ys), max(ys)
-            ridge = (top + bottom) // 2
+            # The bottom rows of every column are wall, not roof — that front
+            # face is what stops the building reading as paper on the ground.
+            wall_from = max(top + 1, bottom - self.FACADE_ROWS + 1)
+            roof_rows = [y for y in ys if y < wall_from]
+            ridge = (top + max(roof_rows)) // 2 if roof_rows else top
             px = (x - x0) * TILE
-            reach = max(1, (bottom - top) / 2)
-            for y in ys:
+            reach = max(1, (max(roof_rows) - top) / 2) if roof_rows else 1
+
+            for y in roof_rows:
                 py = (y - y0) * TILE
                 slope = "back" if y <= ridge else "front"
                 bank = shingles[slope]
@@ -306,17 +329,29 @@ class World:
                 # Both slopes fall away from the ridge. Without this the two
                 # halves read as flat two-tone bands rather than a pitch.
                 fall = abs(y - ridge) / reach
-                dim = int((74 if slope == "back" else 44) * fall)
+                dim = int((48 if slope == "back" else 34) * fall)
                 if dim:
                     shade = pygame.Surface((TILE, TILE), pygame.SRCALPHA)
                     shade.fill((8, 8, 14, dim))
                     surf.blit(shade, (px, py))
-            # Ridge cap, eave band, and the shadow the eave casts on the wall.
-            ry = (ridge - y0) * TILE
-            pygame.draw.rect(surf, pal["cap"], (px, ry, TILE, 3))
-            pygame.draw.rect(surf, pal["trim"], (px, ry + 3, TILE, 1))
+            if roof_rows:
+                ry = (ridge - y0) * TILE
+                pygame.draw.rect(surf, pal["cap"], (px, ry, TILE, 3))
+                pygame.draw.rect(surf, pal["trim"], (px, ry + 3, TILE, 1))
+
+            # The wall itself, then the eave shadow the roof throws across it.
+            for y in range(wall_from, bottom + 1):
+                surf.blit(self._facade[(x * 5 + y) % len(self._facade)],
+                          (px, (y - y0) * TILE))
+            wy = (wall_from - y0) * TILE
+            pygame.draw.rect(surf, pal["eave"], (px, wy - 3, TILE, 5))
+            shade = pygame.Surface((TILE, 6), pygame.SRCALPHA)
+            shade.fill((8, 8, 14, 90))
+            surf.blit(shade, (px, wy + 2))
             by = (bottom - y0 + 1) * TILE
-            pygame.draw.rect(surf, pal["eave"], (px, by - 3, TILE, 3))
+            pygame.draw.rect(surf, pal["wall_d"], (px, by - 2, TILE, 2))  # footing
+
+            self._dress_facade(building, surf, x, px, wy, by, door_cols)
 
         # Gable trim down the outside edges of every column run.
         for x, ys in cols.items():
