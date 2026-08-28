@@ -303,7 +303,7 @@ class World:
         props = art.objects()
         if tx in door_cols:
             if tx == sorted(door_cols)[len(door_cols) // 2]:
-                surf.blit(props[f"door_{building.style}"], (px + 1, wall_bottom - 22))
+                surf.blit(props[f"door_{building.style}"], (px, wall_bottom - 26))
         elif tx % 3 == 1:
             surf.blit(props[f"window_{building.style}"], (px + 2, wall_top + 8))
 

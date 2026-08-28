@@ -737,14 +737,41 @@ def obj_facade_window(style):
 
 
 def obj_facade_door(style):
+    """The way in. A panelled timber door on the houses and the precinct, a
+    steel one with a wired vision panel on the fort and the lab — the same
+    rustic door on a concrete armoury never looked right."""
     p = ROOF_STYLES[style]
-    s = _surf(14, 20)
-    _box(s, (0, 0, 14, 20), (62, 44, 32), (86, 62, 44), INK)
-    pygame.draw.rect(s, (44, 32, 24), (2, 3, 10, 15))
-    for y in (5, 12):
-        pygame.draw.rect(s, (78, 56, 40), (3, y, 8, 5))
-    pygame.draw.rect(s, BRASS, (10, 11, 2, 2))  # handle
-    pygame.draw.rect(s, p["wall_l"], (0, 0, 14, 1))  # lintel
+    s = _surf(16, 24)
+    # Frame and lintel, cut into the wall.
+    pygame.draw.rect(s, p["wall_d"], (0, 0, 16, 24))
+    pygame.draw.rect(s, p["wall_l"], (0, 0, 16, 2))
+    pygame.draw.rect(s, INK, (0, 0, 16, 24), 1)
+
+    if style in ("military", "lab"):
+        leaf, dark, light = (108, 114, 118), (72, 78, 82), (150, 156, 158)
+        pygame.draw.rect(s, leaf, (2, 3, 12, 20))
+        pygame.draw.rect(s, light, (2, 3, 12, 1))
+        pygame.draw.rect(s, dark, (2, 21, 12, 2))
+        pygame.draw.rect(s, dark, (7, 3, 1, 20))  # leaf seam
+        pygame.draw.rect(s, (52, 64, 68), (3, 6, 10, 6))  # vision panel
+        pygame.draw.rect(s, (124, 154, 160), (4, 7, 8, 4))
+        for gx in range(5, 12, 2):  # wired glass
+            pygame.draw.rect(s, (72, 92, 96), (gx, 7, 1, 4))
+        pygame.draw.rect(s, INK, (3, 6, 10, 6), 1)
+        pygame.draw.rect(s, (178, 182, 184), (3, 15, 10, 2))  # push bar
+        pygame.draw.rect(s, (86, 90, 92), (3, 17, 10, 1))
+    else:
+        leaf, dark, light = (116, 78, 50), (74, 50, 32), (146, 104, 68)
+        pygame.draw.rect(s, leaf, (2, 3, 12, 20))
+        pygame.draw.rect(s, light, (2, 3, 12, 1))
+        for y in (5, 14):  # two raised panels
+            pygame.draw.rect(s, dark, (4, y, 8, 6))
+            pygame.draw.rect(s, light, (4, y + 5, 8, 1))
+            pygame.draw.rect(s, INK, (4, y, 8, 6), 1)
+        pygame.draw.rect(s, BRASS, (11, 12, 2, 2))  # knob
+        pygame.draw.rect(s, BRASS_D, (11, 14, 2, 1))
+    # Threshold, so the door meets the ground instead of floating on the wall.
+    pygame.draw.rect(s, p["wall_l"], (0, 23, 16, 1))
     return s
 
 
