@@ -658,6 +658,22 @@ def tile_wainscot(seed):
     return s
 
 
+def tile_roof(seed):
+    """Shingles. Laid over a building whenever the player is outside it, so a
+    room only reveals itself once you have actually walked in."""
+    rng = random.Random(seed)
+    s = pygame.Surface((TILE, TILE))
+    s.fill((52, 44, 48))
+    for i, y in enumerate(range(0, TILE, 5)):
+        x = 0 if i % 2 == 0 else -3
+        while x < TILE:
+            pygame.draw.rect(s, (72, 62, 66), (x + 1, y, 5, 4))
+            pygame.draw.line(s, (94, 82, 86), (x + 1, y), (x + 5, y))
+            x += 6
+    _speckle(s, rng, [(44, 38, 42), (86, 74, 78)], 9)
+    return s
+
+
 def tile_void():
     s = pygame.Surface((TILE, TILE))
     s.fill(NIGHT)

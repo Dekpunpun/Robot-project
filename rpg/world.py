@@ -31,6 +31,7 @@ class World:
         self._build()
         self._furnish()
         self.floor = self._bake_floor()
+        self.roofs = self._bake_roofs()
 
     # --- carving -------------------------------------------------------------
 
@@ -149,6 +150,45 @@ class World:
                     variants = self.tiles.get(kind, self.tiles["void"])
                 surf.blit(variants[(x * 7 + y * 3) % len(variants)], (x * TILE, y * TILE))
         return surf
+
+    def _bake_roofs(self):
+        """One roof surface per building, baked once.
+
+        A building's roof covers its own tiles plus the wall shell around them,
+        so from outside you see a closed structure rather than a lit room with
+        no lid. `main` draws every roof except the one the player is standing
+        under, which is what makes walking through a door feel like entering.
+        """
+        members = {}
+        for y in range(MAP_H):
+            for x in range(MAP_W):
+                z = self.zone_grid[y][x]
+                if z:
+                    members.setdefault(z, set()).add((x, y))
+        for tiles in members.values():
+            shell = set()
+            for x, y in tiles:
+                for dy in (-1, 0, 1):
+                    for dx in (-1, 0, 1):
+                        nx, ny = x + dx, y + dy
+                        if 0 <= nx < MAP_W and 0 <= ny < MAP_H and self.grid[ny][nx] == "wall":
+                            shell.add((nx, ny))
+            tiles |= shell
+        self.zone_tiles = members
+
+        variants = [art.tile_roof(i) for i in range(4)]
+        roofs = {}
+        for zone, tiles in members.items():
+            x0 = min(t[0] for t in tiles)
+            y0 = min(t[1] for t in tiles)
+            w = max(t[0] for t in tiles) - x0 + 1
+            h = max(t[1] for t in tiles) - y0 + 1
+            surf = pygame.Surface((w * TILE, h * TILE), pygame.SRCALPHA)
+            for x, y in tiles:
+                surf.blit(variants[(x * 7 + y * 3) % len(variants)],
+                          ((x - x0) * TILE, (y - y0) * TILE))
+            roofs[zone] = (surf, x0 * TILE, y0 * TILE)
+        return roofs
 
     # --- furniture -----------------------------------------------------------
 
@@ -323,8 +363,11 @@ class World:
         self._look(matchbook, "A matchbook in the gravel", EVIDENCE_BY_ID["matchbook"]["found_text"], evidence="matchbook")
 
         # ---- The grounds -----------------------------------------------------
+        # Nothing goes on the approach rows to the Fort Callow doors (x10-12 and
+        # x50-52): a canopy there reaches down over the corridor mouth and seals
+        # the building shut.
         for tx, ty in (
-            (5, 15), (10, 15), (22, 15), (34, 15), (42, 15), (52, 15), (60, 15),
+            (5, 15), (22, 15), (34, 15), (42, 15), (60, 15),
             (5, 46), (11, 48), (16, 44), (26, 50), (40, 46), (60, 30),
             (33, 16), (43, 40), (43, 46), (20, 44),
             (3, 40), (13, 41), (18, 48), (25, 46), (5, 50), (16, 50),
@@ -365,10 +408,16 @@ class World:
                     return True
         return rect.collidelist(self.blockers) != -1
 
-    def interactable_near(self, point):
-        """The closest thing worth pressing E on, or None."""
+    def interactable_near(self, point, zone=None):
+        """The closest thing worth pressing E on, or None.
+
+        Only things sharing the player's building count: with roofs on, a
+        terminal you cannot see through a wall should not be reachable either.
+        """
         best, best_d = None, INTERACT_RANGE**2
         for it in self.interactables:
+            if self.zone_at(it["rect"].centerx, it["rect"].centery) != zone:
+                continue
             if it["rect"].collidepoint(point):
                 return it
             cx = max(it["rect"].left, min(point[0], it["rect"].right))

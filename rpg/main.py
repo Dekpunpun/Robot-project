@@ -181,6 +181,13 @@ class Game:
         cy = max(0, min(cy, MAP_H * TILE - SCREEN_H))
         return cx, cy
 
+    @property
+    def player_zone(self):
+        """Which building the player is standing in, or None for outdoors.
+        Read fresh rather than from `zone_id`, which only tracks movement so
+        it can fire the entry cutscene."""
+        return self.world.zone_at(self.player.x, self.player.y)
+
     def light(self, radius):
         if radius not in self.lights:
             self.lights[radius] = art.make_light(radius)
@@ -339,7 +346,7 @@ class Game:
     # -- interaction ---------------------------------------------------------
 
     def interact(self):
-        target = self.world.interactable_near((self.player.x, self.player.y - 8))
+        target = self.world.interactable_near((self.player.x, self.player.y - 8), self.player_zone)
         if not target:
             return
         if target.get("npc"):
@@ -750,11 +757,42 @@ class Game:
             else:
                 data.draw(s, cam, self.tick)
 
+        # Roofs go on last, over the room and anyone standing in it — every
+        # building except the one the player is inside.
+        here = self.player_zone
+        roofed = [z for z in self.world.roofs if z != here]
+        for zone in roofed:
+            roof, wx, wy = self.world.roofs[zone]
+            s.blit(roof, (wx - cam[0], wy - cam[1]))
+
+        # Standing at the foot of a building, a 23px sprite reaches up into the
+        # roof above it and vanishes. Anyone outdoors who overlaps a roof this
+        # way gets redrawn on top of the shingles: they are in front of the
+        # building, not inside it.
+        def _under_roof(cx, cy, half_w=8, height=24):
+            for tx in range(int(cx - half_w) // TILE, int(cx + half_w) // TILE + 1):
+                for ty in range(int(cy - height) // TILE, int(cy) // TILE + 1):
+                    for zone in roofed:
+                        if (tx, ty) in self.world.zone_tiles[zone]:
+                            return True
+            return False
+
+        if here is None and _under_roof(self.player.x, self.player.y, 8, self.player.H):
+            self.player.draw(s, cam)
+        for npc in self.npcs.values():
+            if self.world.zone_at(npc.x, npc.y) is None and _under_roof(npc.x, npc.y):
+                npc.draw(s, cam, self.tick)
+
         # Night, punched through by every lamp in range.
         dark = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
         dark.fill((10, 12, 30, 132))
         t = self.tick / 60.0
         for lx, ly, r in self.world.lights:
+            # A lamp under a roof you are not standing under stays hidden,
+            # otherwise its pool glows through the shingles.
+            lz = self.world.zone_at(lx, ly)
+            if lz is not None and lz != here:
+                continue
             if abs(lx - cam[0] - SCREEN_W // 2) > SCREEN_W // 2 + r:
                 continue
             if abs(ly - cam[1] - SCREEN_H // 2) > SCREEN_H // 2 + r:
@@ -793,7 +831,7 @@ class Game:
         self.draw_minimap()
 
         if self.state == PLAYING and not self.box.active:
-            t = self.world.interactable_near((self.player.x, self.player.y - 8))
+            t = self.world.interactable_near((self.player.x, self.player.y - 8), self.player_zone)
             if t:
                 cam = self.camera
                 ui.prompt(s, "E  LOOK" if not t.get("npc") else "E  TALK",
