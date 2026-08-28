@@ -766,6 +766,47 @@ def build_roof_tiles(style):
     }
 
 
+def obj_pole():
+    """A utility pole. Nothing says city street after dark like a line of
+    these marching off into the fog with the wires sagging between them."""
+    s = _surf(10, 36)
+    _box(s, (3, 6, 4, 30), (86, 62, 42), (112, 84, 58), (48, 34, 22))
+    for y in range(10, 34, 6):
+        pygame.draw.line(s, (58, 42, 28), (3, y), (6, y))
+    pygame.draw.rect(s, (72, 52, 36), (0, 6, 10, 2))  # crossarm
+    pygame.draw.rect(s, INK, (0, 6, 10, 2), 1)
+    for x in (1, 8):  # glass insulators
+        pygame.draw.rect(s, (104, 150, 152), (x, 3, 2, 3))
+    pygame.draw.rect(s, (40, 30, 22), (2, 34, 6, 2))  # base
+    return s
+
+
+def obj_bin():
+    s = _surf(12, 15)
+    _box(s, (1, 3, 10, 12), (68, 72, 68), (92, 98, 90), INK)
+    pygame.draw.rect(s, (54, 58, 54), (0, 1, 12, 3))
+    pygame.draw.rect(s, INK, (0, 1, 12, 3), 1)
+    pygame.draw.rect(s, (46, 50, 46), (5, 0, 2, 2))  # handle
+    return s
+
+
+def obj_drain():
+    """A storm grate. Flat to the ground — nothing walks around it."""
+    s = _surf(14, 8)
+    _box(s, (0, 0, 14, 8), (52, 54, 58), (78, 80, 86), (30, 32, 36))
+    for x in range(2, 13, 3):
+        pygame.draw.rect(s, (22, 24, 28), (x, 2, 1, 5))
+    return s
+
+
+def obj_hydrant():
+    s = _surf(8, 14)
+    _box(s, (1, 3, 6, 11), (146, 52, 46), (180, 76, 64), INK)
+    pygame.draw.rect(s, (180, 76, 64), (0, 5, 8, 2))
+    pygame.draw.rect(s, (110, 38, 34), (2, 0, 4, 3))
+    return s
+
+
 def obj_chimney():
     s = _surf(10, 14)
     _box(s, (0, 2, 10, 12), (92, 62, 52), (118, 82, 66), INK)
@@ -1508,6 +1549,10 @@ def build_objects():
         "truck": obj_truck(),
         "oil_drum": obj_oil_drum(),
         "chimney": obj_chimney(),
+        "pole": obj_pole(),
+        "bin": obj_bin(),
+        "drain": obj_drain(),
+        "hydrant": obj_hydrant(),
         **{f"window_{s}": obj_facade_window(s) for s in ROOF_STYLES},
         **{f"door_{s}": obj_facade_door(s) for s in ROOF_STYLES},
         "roof_vent": obj_roof_vent(),

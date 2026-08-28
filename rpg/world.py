@@ -215,6 +215,29 @@ class World:
                 else:
                     variants = self.tiles.get(kind, self.tiles["void"])
                 surf.blit(variants[(x * 7 + y * 3) % len(variants)], (x * TILE, y * TILE))
+
+        # Kerbs. A road with no edge reads as a grey shape painted on grass;
+        # a raised lip along every ground-facing side turns the same tiles
+        # into a street.
+        for y in range(MAP_H):
+            for x in range(MAP_W):
+                if self.grid[y][x] != "path":
+                    continue
+                px, py = x * TILE, y * TILE
+                for dx, dy in ((0, -1), (0, 1), (-1, 0), (1, 0)):
+                    nx, ny = x + dx, y + dy
+                    if not (0 <= nx < MAP_W and 0 <= ny < MAP_H):
+                        continue
+                    if self.grid[ny][nx] not in ("grass", "hedge"):
+                        continue
+                    if dy:  # horizontal kerb, lit on top and shadowed beneath
+                        ky = py if dy < 0 else py + TILE - 3
+                        pygame.draw.rect(surf, STONE_L, (px, ky, TILE, 2))
+                        pygame.draw.rect(surf, STONE_D, (px, ky + 2, TILE, 1))
+                    else:
+                        kx = px if dx < 0 else px + TILE - 3
+                        pygame.draw.rect(surf, STONE_L, (kx, py, 2, TILE))
+                        pygame.draw.rect(surf, STONE_D, (kx + 2, py, 1, TILE))
         return surf
 
     def _bake_roofs(self):
@@ -621,6 +644,26 @@ class World:
             put("bush", tx, ty, solid=(2, 6, 12, 8))
         for tx, ty in ((10, 50), (14, 49), (23, 50), (36, 50), (41, 50), (8, 47)):
             put("flowers", tx, ty)
+
+        # ---- the street itself ------------------------------------------------
+        # Utility poles down both sides of the spine, with the wires strung
+        # between them. Kept off the roadway so nothing blocks a crossing.
+        self.wires = []
+        for row, xs in ((17, (14, 21, 36, 45)), (21, (14, 21, 36, 45))):
+            last = None
+            for tx in xs:
+                put("pole", tx, row, solid=(3, 30, 4, 5))
+                top = (tx * TILE + 5, row * TILE + 8)
+                if last:
+                    self.wires.append((last, top))
+                last = top
+
+        for tx, ty in ((13, 21), (35, 17), (46, 21)):
+            put("bin", tx, ty, solid=(1, 8, 10, 6))
+        for tx, ty in ((20, 19), (33, 26), (44, 19)):
+            put("drain", tx, ty)
+        for tx, ty in ((15, 19), (42, 21)):
+            put("hydrant", tx, ty, solid=(1, 8, 6, 5))
         for tx, ty in ((8, 15), (18, 15), (30, 15), (46, 15), (58, 15), (8, 48), (58, 48)):
             put("lamp", tx, ty, solid=(2, 24, 12, 6))
             lamp(tx, ty, 74, oy=26)

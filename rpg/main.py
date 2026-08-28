@@ -766,6 +766,20 @@ class Game:
             roof, wx, wy = self.world.roofs[zone]
             s.blit(roof, (wx - cam[0], wy - cam[1]))
 
+        # Overhead wires, drawn above the roofs because that is where they run.
+        # Each span sags in the middle, which is the whole character of them.
+        for (ax, ay), (bx, by) in self.world.wires:
+            x1, y1 = ax - cam[0], ay - cam[1]
+            x2, y2 = bx - cam[0], by - cam[1]
+            if max(x1, x2) < -20 or min(x1, x2) > SCREEN_W + 20:
+                continue
+            pts = []
+            for i in range(7):
+                f = i / 6
+                sag = math.sin(f * math.pi) * 5
+                pts.append((x1 + (x2 - x1) * f, y1 + (y2 - y1) * f + sag))
+            pygame.draw.lines(s, (26, 24, 32), False, pts, 1)
+
         # Smoke, only from the chimneys of buildings currently wearing a roof.
         for cx, cy, zone in self.world.chimneys:
             if zone == here:
