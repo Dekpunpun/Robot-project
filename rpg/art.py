@@ -243,14 +243,201 @@ def _standing(body, legend):
     return from_art(body + _STAND_LEGS, legend)
 
 
+# Each suspect gets their own build and headgear rather than a recolour of the
+# detective: a patrol cap over heavy shoulders reads as a different man from a
+# garrison cap over a narrow frame, even at sixteen pixels. Every body is 20
+# rows of 16 so it drops onto the same standing legs.
+
+THORNE_BODY = [
+    "................",
+    "...._______.....",
+    "..._HHhhhhHH_...",
+    "..._HhhhhhhH_...",
+    "..._HHHHHHHH_...",
+    ".._bbbbbbbbbb_..",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sesses_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    "._cccccccccccc_.",
+    "._ccckttkccccc_.",
+    "._ccckttkccccc_.",
+    "._ccckttkccccc_.",
+    "._ccckttkccccc_.",
+    "._CcckttkcccCC_.",
+    "._CCCCCCCCCCCC_.",
+]
+THORNE_SLUMP = [
+    "................",
+    "................",
+    "...._______.....",
+    "..._HHhhhhHH_...",
+    "..._HhhhhhhH_...",
+    "..._HHHHHHHH_...",
+    ".._bbbbbbbbbb_..",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    "._cccccccccccc_.",
+    "._ccckttkccccc_.",
+    "._ccckttkccccc_.",
+    "._ccckttkccccc_.",
+    "._CcckttkcccCC_.",
+    "._CCCCCCCCCCCC_.",
+    "................",
+    "................",
+]
+
+DOSS_BODY = [
+    "................",
+    "................",
+    "....._HHHH_.....",
+    "...._HhhhhH_....",
+    "..._HHHHHHHH_...",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sesses_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    "..._cccccccc_...",
+    "..._ckttkccc_...",
+    "..._ckttkccc_...",
+    "..._ckttkccc_...",
+    "..._ckttkccc_...",
+    "..._CkttkccC_...",
+    "..._CCCCCCCC_...",
+]
+DOSS_SLUMP = [
+    "................",
+    "................",
+    "................",
+    "....._HHHH_.....",
+    "...._HhhhhH_....",
+    "..._HHHHHHHH_...",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    "..._cccccccc_...",
+    "..._ckttkccc_...",
+    "..._ckttkccc_...",
+    "..._ckttkccc_...",
+    "..._CkttkccC_...",
+    "..._CCCCCCCC_...",
+    "................",
+    "................",
+    "................",
+]
+
+ASHWORTH_BODY = [
+    "................",
+    "...._______.....",
+    "...._HHHHHH_....",
+    "...._HhhhhH_....",
+    "..._HHHHHHHH_...",
+    ".._bbbbbbbbbb_..",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sesses_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    ".._cccccccccc_..",
+    ".._cckcccckcc_..",
+    ".._cckcccckcc_..",
+    ".._cckcccckcc_..",
+    ".._cckcccckcc_..",
+    ".._CckcccckcC_..",
+    ".._CCCCCCCCCC_..",
+]
+ASHWORTH_SLUMP = [
+    "................",
+    "................",
+    "...._______.....",
+    "...._HHHHHH_....",
+    "...._HhhhhH_....",
+    "..._HHHHHHHH_...",
+    ".._bbbbbbbbbb_..",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    ".._cccccccccc_..",
+    ".._cckcccckcc_..",
+    ".._cckcccckcc_..",
+    ".._cckcccckcc_..",
+    ".._CckcccckcC_..",
+    ".._CCCCCCCCCC_..",
+    "................",
+    "................",
+]
+
+# Bricker stands hunched: short neck, shoulders riding high, hands in pockets.
+BRICKER_BODY = [
+    "................",
+    "................",
+    "....._HHHH_.....",
+    "...._HHHHHH_....",
+    "...._hhhhhh_....",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sesses_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    ".._cccccccccc_..",
+    ".._cccccccccc_..",
+    ".._cCCccccCCc_..",
+    ".._cCCccccCCc_..",
+    ".._cccccccccc_..",
+    ".._cccccccccc_..",
+    ".._CccccccccC_..",
+    ".._CCCCCCCCCC_..",
+]
+BRICKER_SLUMP = [
+    "................",
+    "................",
+    "................",
+    "....._HHHH_.....",
+    "...._HHHHHH_....",
+    "...._hhhhhh_....",
+    "...._SSSSSS_....",
+    "...._ssssss_....",
+    "...._sSSSSs_....",
+    "....._ssss_.....",
+    "....._tttt_.....",
+    ".._cccccccccc_..",
+    ".._cCCccccCCc_..",
+    ".._cCCccccCCc_..",
+    ".._cccccccccc_..",
+    ".._cccccccccc_..",
+    ".._CccccccccC_..",
+    ".._CCCCCCCCCC_..",
+    "................",
+    "................",
+]
+
+
 THORNE = {
     "_": INK, "H": (52, 58, 44), "h": (74, 86, 58), "b": (30, 28, 46),
     "s": (208, 168, 134), "S": (172, 122, 88), "e": (30, 24, 36),
     "c": (74, 86, 58), "C": (54, 64, 42), "k": (100, 114, 80),
     "t": (60, 70, 50), "p": (40, 38, 34), "o": (26, 24, 22),
 }
-THORNE_STANDING = _standing(DET_DOWN, THORNE)
-THORNE_BROKEN = _standing(DET_UP, THORNE)
+THORNE_STANDING = _standing(THORNE_BODY, THORNE)
+THORNE_BROKEN = _standing(THORNE_SLUMP, THORNE)
 
 DOSS = {
     "_": INK, "H": (74, 66, 48), "h": (132, 118, 84), "b": (30, 28, 46),
@@ -258,8 +445,8 @@ DOSS = {
     "c": (132, 118, 84), "C": (98, 86, 58), "k": (162, 148, 112),
     "t": (98, 86, 58), "p": (52, 46, 36), "o": (30, 26, 20),
 }
-DOSS_STANDING = _standing(DET_DOWN, DOSS)
-DOSS_OPEN = _standing(DET_UP, DOSS)
+DOSS_STANDING = _standing(DOSS_BODY, DOSS)
+DOSS_OPEN = _standing(DOSS_SLUMP, DOSS)
 
 ASHWORTH = {
     "_": INK, "H": (34, 36, 46), "h": (58, 60, 74), "b": (24, 22, 34),
@@ -267,8 +454,8 @@ ASHWORTH = {
     "c": (58, 60, 74), "C": (40, 42, 54), "k": (82, 84, 100),
     "t": (188, 148, 70), "p": (36, 38, 48), "o": (22, 20, 30),
 }
-ASHWORTH_STANDING = _standing(DET_DOWN, ASHWORTH)
-ASHWORTH_OPEN = _standing(DET_UP, ASHWORTH)
+ASHWORTH_STANDING = _standing(ASHWORTH_BODY, ASHWORTH)
+ASHWORTH_OPEN = _standing(ASHWORTH_SLUMP, ASHWORTH)
 
 BRICKER = {
     "_": INK, "H": (40, 40, 44), "h": (60, 60, 66), "b": (26, 26, 32),
@@ -276,8 +463,8 @@ BRICKER = {
     "c": (70, 84, 96), "C": (50, 62, 72), "k": (96, 112, 124),
     "t": (50, 62, 72), "p": (44, 44, 48), "o": (28, 26, 24),
 }
-BRICKER_STANDING = _standing(DET_DOWN, BRICKER)
-BRICKER_SHAKEN = _standing(DET_UP, BRICKER)
+BRICKER_STANDING = _standing(BRICKER_BODY, BRICKER)
+BRICKER_SHAKEN = _standing(BRICKER_SLUMP, BRICKER)
 
 def _mark(surf, pixels):
     """Stamp a few extra pixels onto a built sprite — small insignia and
@@ -287,20 +474,24 @@ def _mark(surf, pixels):
     return surf
 
 
-# Sergeant's chevrons on the sleeve — rank, not just a uniform colour.
+# Insignia sit on the sleeve of each body, so the coordinates below are per
+# build rather than shared — a mark placed for one silhouette lands off the
+# edge of a narrower one.
+
+# Sergeant's chevrons, on the broad sleeve.
 _mark(THORNE_STANDING, [
-    (2, 15, (196, 190, 150)), (3, 16, (196, 190, 150)), (2, 17, (196, 190, 150)),
+    (3, 15, (196, 190, 150)), (4, 16, (196, 190, 150)), (3, 17, (196, 190, 150)),
 ])
 _mark(THORNE_BROKEN, [
-    (2, 15, (196, 190, 150)), (3, 16, (196, 190, 150)), (2, 17, (196, 190, 150)),
+    (3, 14, (196, 190, 150)), (4, 15, (196, 190, 150)), (3, 16, (196, 190, 150)),
 ])
 
-# A wrench hooked on the belt — the vault NCO who signs for the tools.
+# A wrench on the belt — the vault NCO who signs for the tools.
 _mark(DOSS_STANDING, [
-    (11, 18, (176, 176, 184)), (12, 18, (176, 176, 184)), (12, 19, (140, 140, 148)),
+    (10, 17, (176, 176, 184)), (10, 18, (176, 176, 184)), (9, 18, (140, 140, 148)),
 ])
 _mark(DOSS_OPEN, [
-    (11, 18, (176, 176, 184)), (12, 18, (176, 176, 184)), (12, 19, (140, 140, 148)),
+    (10, 15, (176, 176, 184)), (10, 16, (176, 176, 184)), (9, 16, (140, 140, 148)),
 ])
 
 # A colonel's shoulder star — gold, unmissable next to two corporals.
@@ -308,7 +499,7 @@ _mark(ASHWORTH_STANDING, [
     (10, 14, BRASS), (11, 14, BRASS), (10, 15, BRASS_D),
 ])
 _mark(ASHWORTH_OPEN, [
-    (10, 14, BRASS), (11, 14, BRASS), (10, 15, BRASS_D),
+    (10, 13, BRASS), (11, 13, BRASS), (10, 14, BRASS_D),
 ])
 
 # Grease on the coat — a motor pool mechanic never quite gets clean.
@@ -979,6 +1170,72 @@ def obj_kitchen_mess():
     return s
 
 
+def obj_corkboard():
+    """The precinct's board: photos, pins, and red string between them. The
+    string is the point — it's the one prop that says 'investigation'."""
+    s = _surf(46, 26)
+    _box(s, (0, 0, 46, 26), (146, 108, 62), (176, 136, 84), (78, 54, 30))
+    rng = random.Random(31)
+    cards = []
+    for cx, cy, w, h in ((4, 4, 9, 7), (18, 3, 10, 8), (33, 5, 9, 7),
+                         (7, 15, 10, 7), (24, 16, 12, 6)):
+        pygame.draw.rect(s, PAPER, (cx, cy, w, h))
+        pygame.draw.rect(s, PAPER_D, (cx, cy + h - 2, w, 2))
+        pygame.draw.rect(s, INK, (cx, cy, w, h), 1)
+        for _ in range(2):  # a scrawled line or two per card
+            ly = cy + 2 + rng.randrange(0, max(1, h - 3))
+            pygame.draw.line(s, (128, 122, 108), (cx + 2, ly), (cx + w - 3, ly))
+        cards.append((cx + w // 2, cy + h // 2))
+    for a, b in zip(cards, cards[1:]):
+        pygame.draw.line(s, (168, 46, 44), a, b)
+    pygame.draw.line(s, (168, 46, 44), cards[0], cards[-1])
+    for px, py in cards:
+        s.set_at((px, py), (232, 208, 96))  # brass pin head
+    return s
+
+
+def obj_wallmap():
+    """Ashworth's wall map of Harrow's Reach — coastline, roads, a pinned site."""
+    s = _surf(40, 28)
+    _box(s, (0, 0, 40, 28), (206, 196, 168), (228, 220, 196), (72, 60, 44))
+    pygame.draw.rect(s, (156, 176, 158), (2, 2, 36, 24))
+    # Water along the bottom, land above it.
+    pygame.draw.rect(s, (86, 122, 156), (2, 20, 36, 6))
+    pygame.draw.line(s, (66, 98, 130), (2, 20), (38, 20))
+    rng = random.Random(37)
+    for _ in range(9):  # blocks
+        bx, by = rng.randrange(3, 34), rng.randrange(3, 17)
+        pygame.draw.rect(s, (132, 152, 136), (bx, by, rng.randrange(3, 6), rng.randrange(2, 4)))
+    for x in (11, 22, 31):  # roads
+        pygame.draw.line(s, (198, 190, 166), (x, 3), (x, 19))
+    pygame.draw.line(s, (198, 190, 166), (3, 12), (37, 12))
+    pygame.draw.rect(s, DANGER, (29, 21, 3, 3))  # the pin on Salt Row
+    return s
+
+
+def obj_bollard():
+    """A dock bollard with rope looped over it."""
+    s = _surf(12, 16)
+    _box(s, (3, 4, 6, 12), (62, 58, 66), (94, 90, 100), INK)
+    _box(s, (2, 1, 8, 4), (78, 74, 84), (110, 106, 118), INK)
+    pygame.draw.arc(s, (156, 132, 88), (0, 7, 12, 8), 3.4, 6.0, 2)
+    return s
+
+
+def obj_munitions_crate():
+    """A stencilled weapons case — the shape five of these left behind."""
+    s = _surf(20, 15)
+    _box(s, (0, 2, 20, 13), (76, 84, 62), (98, 108, 78), (44, 50, 36))
+    pygame.draw.rect(s, (44, 50, 36), (0, 6, 20, 1))
+    pygame.draw.rect(s, (44, 50, 36), (0, 11, 20, 1))
+    for x in (3, 15):  # latches
+        pygame.draw.rect(s, (152, 148, 132), (x, 7, 2, 3))
+    # Stencil block, unreadable at this size but unmistakably a marking.
+    for i, x in enumerate(range(6, 15, 3)):
+        pygame.draw.rect(s, (198, 192, 160), (x, 3, 2, 2))
+    return s
+
+
 def build_objects():
     return {
         "plinth": obj_plinth(),
@@ -1023,6 +1280,10 @@ def build_objects():
         "photo_facedown": obj_photo_facedown(),
         "matchbook": obj_matchbook(),
         "kitchen_mess": obj_kitchen_mess(),
+        "corkboard": obj_corkboard(),
+        "wallmap": obj_wallmap(),
+        "bollard": obj_bollard(),
+        "munitions_crate": obj_munitions_crate(),
         **{f"marker{i}": obj_marker(i) for i in range(1, 6)},
     }
 

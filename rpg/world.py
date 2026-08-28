@@ -206,6 +206,9 @@ class World:
         put("lamp", 6, 9, solid=(2, 24, 12, 6))
         lamp(6, 9, 74, oy=26)
 
+        put("munitions_crate", 10, 4, solid=True)
+        put("munitions_crate", 12, 10, solid=True)
+
         terminal = put("vault_terminal", 15, 8, solid=True)
         self._look(terminal, "Vault checkout terminal", EVIDENCE_BY_ID["vault-ledger"]["found_text"], evidence="vault-ledger")
 
@@ -226,6 +229,10 @@ class World:
             lamp(tx, 4, 70)
         put("banner", 45, 4, oy=-2)
         put("banner", 58, 4, oy=-2)
+        wallmap = put("wallmap", 53, 3, oy=4)
+        self._look(wallmap, "Wall map of Harrow's Reach",
+                   "The whole district under glass. Someone has pushed a single red pin "
+                   "into Salt Row, down by the water, and left it there.")
 
         self._npc_spot("ashworth", 51, 10)
 
@@ -234,8 +241,12 @@ class World:
         row("bench", (26, 35), 45, solid=True)
         put("shelf", 25, 42, solid=True)
         put("shelf", 38, 42, solid=True)
-        put("banner", 27, 41, oy=4)
         put("banner", 36, 41, oy=4)
+        board = put("corkboard", 26, 41, oy=4)
+        self._look(board, "The case board",
+                   "Five photographs, a duty roster, and a torn-off map corner, strung "
+                   "together in red. Your own handwriting on most of it. None of it "
+                   "yet says who.")
         for tx in (27, 31, 36):
             put("sconce", tx, 41, oy=8)
             lamp(tx, 42, 74)
@@ -272,6 +283,9 @@ class World:
         lamp(45, 32, 74, oy=26)
         put("lamp", 55, 32, solid=(2, 24, 12, 6))
         lamp(55, 32, 74, oy=26)
+        # The dock itself, out front of the cabin.
+        for tx in (44, 47, 53, 56):
+            put("bollard", tx, 41, solid=(3, 8, 6, 6))
 
         self._npc_spot("thorne", 49, 36)
 
