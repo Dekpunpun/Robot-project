@@ -19,6 +19,72 @@ WALKABLE = {"marble_d", "wood", "carpet", "path", "grass"}
 INTERIOR = {"marble_d", "wood", "carpet"}
 
 
+class Building:
+    """One structure on the map, described in a single place.
+
+    Give it its rooms and the corridor that pokes out to the street, and
+    everything downstream is derived: the zone tag that lifts the roof when
+    you walk in, the wall shell the sealing pass builds around it, the door
+    punched back through that shell, the title card the entry cutscene
+    shows, and the approach lane that furniture is forbidden to block.
+
+    Before this existed all five of those lived in separate hand-typed
+    lists, which is how a tree ended up parked inside the vault doorway and
+    sealed the building shut.
+    """
+
+    def __init__(self, zone, title, subtitle, rooms, corridor):
+        self.zone = zone
+        self.title = title
+        self.subtitle = subtitle
+        self.rooms = rooms  # [(x, y, w, h, floor)]
+        self.corridor = corridor  # (x, y, w, h, floor)
+
+    @property
+    def _exits_south(self):
+        """True when the corridor leaves from the bottom of the building."""
+        cx, cy, cw, ch, _ = self.corridor
+        return cy >= max(y + h for _, y, _, h, _ in self.rooms)
+
+    @property
+    def door_row(self):
+        """The row the sealing pass walls shut and the door punches back open:
+        one tile past the far end of the corridor."""
+        _, cy, _, ch, _ = self.corridor
+        return cy + ch if self._exits_south else cy - 1
+
+    @property
+    def door_tiles(self):
+        cx, _, cw, _, _ = self.corridor
+        return [(x, self.door_row) for x in range(cx, cx + cw)]
+
+    @property
+    def approach(self):
+        """Every tile that has to stay walkable for the building to be usable:
+        the corridor, its door, and the step of street just outside it."""
+        cx, cy, cw, ch, _ = self.corridor
+        tiles = [(x, y) for x in range(cx, cx + cw) for y in range(cy, cy + ch)]
+        tiles += self.door_tiles
+        outside = self.door_row + 1 if self._exits_south else self.door_row - 1
+        tiles += [(x, outside) for x in range(cx, cx + cw)]
+        return tiles
+
+
+BUILDINGS = [
+    Building("vault", "FORT CALLOW", "SPECIAL WEAPONS VAULT",
+             rooms=[(4, 3, 16, 9, "marble_d")], corridor=(10, 12, 3, 7, "marble_d")),
+    Building("command", "FORT CALLOW", "COMMAND OFFICE",
+             rooms=[(44, 3, 16, 9, "carpet")], corridor=(50, 12, 3, 7, "carpet")),
+    Building("precinct", "THIRD PRECINCT", "HOME BASE",
+             rooms=[(24, 40, 16, 8, "wood")], corridor=(30, 34, 3, 6, "wood")),
+    Building("milner", "14 MILNER STREET", "THE THORNE HOUSE",
+             rooms=[(4, 30, 9, 11, "wood"), (13, 30, 8, 11, "marble_d")],
+             corridor=(7, 41, 3, 5, "wood")),
+    Building("saltrow", "SALT ROW, DOCK 4", "THE FISHING CABIN",
+             rooms=[(43, 30, 14, 10, "wood")], corridor=(48, 40, 3, 5, "wood")),
+]
+
+
 class World:
     def __init__(self):
         self.grid = [["void"] * MAP_W for _ in range(MAP_H)]
@@ -48,13 +114,7 @@ class World:
 
     def _build(self):
         self.zone_grid = [[None] * MAP_W for _ in range(MAP_H)]
-        self.zone_names = {
-            "vault": ("FORT CALLOW", "SPECIAL WEAPONS VAULT"),
-            "command": ("FORT CALLOW", "COMMAND OFFICE"),
-            "precinct": ("THIRD PRECINCT", "HOME BASE"),
-            "milner": ("14 MILNER STREET", "THE THORNE HOUSE"),
-            "saltrow": ("SALT ROW, DOCK 4", "THE FISHING CABIN"),
-        }
+        self.zone_names = {b.zone: (b.title, b.subtitle) for b in BUILDINGS}
 
         def zone_fill(x, y, w, h, kind, zone, over=None):
             self._fill(x, y, w, h, kind, over)
@@ -63,20 +123,13 @@ class World:
                     if 0 <= tx < MAP_W and 0 <= ty < MAP_H:
                         self.zone_grid[ty][tx] = zone
 
-        # Buildings.
-        zone_fill(4, 3, 16, 9, "marble_d", "vault")  # Fort Callow - Special Weapons Vault
-        zone_fill(44, 3, 16, 9, "carpet", "command")  # Fort Callow - Command Office
-        zone_fill(24, 40, 16, 8, "wood", "precinct")  # Third Precinct
-        zone_fill(4, 30, 9, 11, "wood", "milner")  # 14 Milner Street - kitchen
-        zone_fill(13, 30, 8, 11, "marble_d", "milner")  # 14 Milner Street - garage
-        zone_fill(43, 30, 14, 10, "wood", "saltrow")  # Salt Row - Dock 4, the fishing cabin
-
-        # Corridors — each pokes one building out to a doorway in the yard.
-        zone_fill(10, 12, 3, 7, "marble_d", "vault")  # vault -> yard
-        zone_fill(50, 12, 3, 7, "carpet", "command")  # command office -> yard
-        zone_fill(30, 34, 3, 6, "wood", "precinct")  # precinct -> yard
-        zone_fill(7, 41, 3, 5, "wood", "milner")  # Milner Street -> yard
-        zone_fill(48, 40, 3, 5, "wood", "saltrow")  # Salt Row -> yard
+        # Every building carves itself: rooms first, then the corridor that
+        # takes it out to the street.
+        for b in BUILDINGS:
+            for x, y, w, h, floor in b.rooms:
+                zone_fill(x, y, w, h, floor, b.zone)
+            cx, cy, cw, ch, floor = b.corridor
+            zone_fill(cx, cy, cw, ch, floor, b.zone)
 
         # Seal the city: any void touching a floor becomes wall.
         walls = []
@@ -118,19 +171,22 @@ class World:
                 if self.grid[y][x] == "grass" and (x <= 2 or y <= 2 or x >= MAP_W - 3 or y >= MAP_H - 3):
                     self.grid[y][x] = "hedge"
 
-        # Doors. Each corridor above ends one row short of the path network,
-        # so the sealing pass above walls that row shut — reopen exactly that
-        # row on each of the five, same trick as the wall it just punched.
-        for tx in (10, 11, 12):
-            self.grid[19][tx] = "path"  # vault -> yard
-        for tx in (50, 51, 52):
-            self.grid[19][tx] = "path"  # command office -> yard
-        for tx in (30, 31, 32):
-            self.grid[33][tx] = "path"  # precinct -> yard
-        for tx in (7, 8, 9):
-            self.grid[46][tx] = "path"  # Milner Street -> yard
-        for tx in (48, 49, 50):
-            self.grid[45][tx] = "path"  # Salt Row -> yard
+        # Doors. Each corridor ends one row short of the path network, so the
+        # sealing pass above walls that row shut — punch exactly that row back
+        # open. The row is derived from the corridor, so moving a building
+        # moves its door with it.
+        for b in BUILDINGS:
+            for tx, ty in b.door_tiles:
+                self.grid[ty][tx] = "path"
+
+        # The lanes furniture may never stand in. Anything with a collision box
+        # that lands here would seal a building shut from the outside, which is
+        # exactly how a decorative tree once locked the vault.
+        self._keep_clear = [
+            pygame.Rect(tx * TILE, ty * TILE, TILE, TILE)
+            for b in BUILDINGS
+            for tx, ty in b.approach
+        ]
 
     def _bake_floor(self):
         """Draw the whole map once. It never changes, so it never redraws."""
@@ -201,12 +257,32 @@ class World:
             solid = (0, surf.get_height() // 2, surf.get_width(), surf.get_height() // 2)
         if solid:
             dx, dy, w, h = solid
-            self.blockers.append(pygame.Rect(x + dx, y + dy, w, h))
+            box = pygame.Rect(x + dx, y + dy, w, h)
+            if box.collidelist(self._keep_clear) != -1:
+                raise ValueError(
+                    f"prop {key!r} at tile ({tx},{ty}) blocks a building "
+                    f"approach lane — move it clear of the doorway"
+                )
+            self.blockers.append(box)
         return pygame.Rect(x, y, surf.get_width(), surf.get_height())
 
     def _look(self, rect, title, body, evidence=None):
+        """Register something the player can press E on.
+
+        Two lookable props whose reach overlaps are a silent trap: the game
+        returns whichever centre is nearer, so one of them becomes
+        unreachable and its evidence uncollectable. That is what an arms
+        rack once did to the gate camera, so it is refused outright here.
+        """
+        reach = rect.inflate(12, 12)
+        for other in self.interactables:
+            if reach.colliderect(other["rect"]):
+                raise ValueError(
+                    f"interactable {title!r} overlaps {other['title']!r} — "
+                    f"one of them would be unreachable"
+                )
         self.interactables.append(
-            {"rect": rect.inflate(12, 12), "title": title, "body": body, "evidence": evidence}
+            {"rect": reach, "title": title, "body": body, "evidence": evidence}
         )
 
     def _npc_spot(self, sid, tx, ty, ox=8, oy=20):
