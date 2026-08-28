@@ -1052,3 +1052,160 @@ def make_light(radius, colour=(255, 226, 168), strength=190):
         a = int(strength * (1 - (i - 1) / bands) ** 1.7)
         pygame.draw.circle(s, (*colour, a), (radius, radius), r)
     return s
+
+
+# --- interview portraits -----------------------------------------------------
+#
+# A 48x48 bust per suspect, in three states. These are drawn rather than
+# authored as string art: at this size the head is a handful of rectangles, and
+# what actually carries a performance is the eyes, brows and mouth — those get
+# placed by hand, pixel by pixel, below. Each character shares one skull and is
+# told apart by legend colours plus their own headwear.
+
+EYE_L, EYE_R = 20, 28  # eye centres
+BROW_Y, EYE_Y, MOUTH_Y = 15, 18, 26
+
+
+def _bust_base(lg):
+    s = _surf(48, 48)
+    skin, skin_d, coat, coat_d, coat_l = lg["s"], lg["S"], lg["c"], lg["C"], lg["k"]
+
+    # Shoulders and collar.
+    pygame.draw.rect(s, coat, (3, 35, 42, 13))
+    pygame.draw.rect(s, coat_d, (3, 44, 42, 4))
+    pygame.draw.rect(s, coat_l, (3, 35, 42, 1))
+    pygame.draw.rect(s, INK, (3, 34, 42, 1))
+    # Collar notch, so the neck reads as sitting inside a shirt.
+    pygame.draw.polygon(s, coat_d, [(18, 35), (24, 42), (30, 35)])
+    pygame.draw.polygon(s, INK, [(18, 35), (24, 42), (30, 35)], 1)
+
+    # Neck.
+    pygame.draw.rect(s, skin_d, (20, 29, 8, 7))
+    pygame.draw.rect(s, INK, (19, 29, 1, 7))
+    pygame.draw.rect(s, INK, (28, 29, 1, 7))
+
+    # Skull: a rect with the corners knocked off rather than a true oval —
+    # ovals at 24px go lumpy, and the flat planes read better under lamplight.
+    pygame.draw.rect(s, skin, (14, 7, 20, 24))
+    pygame.draw.rect(s, skin, (13, 11, 22, 15))
+    pygame.draw.rect(s, skin_d, (14, 27, 20, 4))  # jaw in shadow
+    pygame.draw.rect(s, skin_d, (30, 11, 4, 18))  # lit from the left
+    for x, y in ((14, 7), (33, 7), (14, 30), (33, 30)):
+        s.set_at((x, y), (0, 0, 0, 0))
+    # Ears.
+    pygame.draw.rect(s, skin_d, (12, 17, 2, 5))
+    pygame.draw.rect(s, skin_d, (34, 17, 2, 5))
+    # Outline down both cheeks.
+    pygame.draw.rect(s, INK, (12, 8, 1, 23))
+    pygame.draw.rect(s, INK, (35, 8, 1, 23))
+    pygame.draw.rect(s, INK, (14, 31, 20, 1))
+
+    # Nose.
+    pygame.draw.rect(s, skin_d, (23, 20, 2, 4))
+    pygame.draw.rect(s, INK, (23, 24, 3, 1))
+    return s
+
+
+def _face(s, lg, mood):
+    """Brows, eyes and mouth — the whole performance lives in nine rows."""
+    ink, white = INK, (236, 232, 226)
+    if mood == "steady":
+        for x in (EYE_L - 2, EYE_R - 2):
+            pygame.draw.rect(s, ink, (x, BROW_Y, 5, 1))
+        for x in (EYE_L - 1, EYE_R - 1):
+            pygame.draw.rect(s, white, (x, EYE_Y, 3, 2))
+            pygame.draw.rect(s, ink, (x + 1, EYE_Y, 1, 2))
+        pygame.draw.rect(s, ink, (21, MOUTH_Y, 7, 1))
+    elif mood == "rattled":
+        # Inner brows lift; the mouth tightens and pulls down at one corner.
+        pygame.draw.rect(s, ink, (EYE_L - 2, BROW_Y + 1, 3, 1))
+        pygame.draw.rect(s, ink, (EYE_L + 1, BROW_Y, 2, 1))
+        pygame.draw.rect(s, ink, (EYE_R - 1, BROW_Y, 2, 1))
+        pygame.draw.rect(s, ink, (EYE_R + 1, BROW_Y + 1, 3, 1))
+        for x in (EYE_L - 1, EYE_R - 1):
+            pygame.draw.rect(s, white, (x, EYE_Y, 3, 3))
+            pygame.draw.rect(s, ink, (x + 1, EYE_Y + 1, 1, 2))
+        pygame.draw.rect(s, ink, (21, MOUTH_Y, 6, 1))
+        s.set_at((27, MOUTH_Y + 1), ink)
+    else:  # cracking
+        pygame.draw.rect(s, ink, (EYE_L - 2, BROW_Y + 2, 4, 1))
+        pygame.draw.rect(s, ink, (EYE_L + 2, BROW_Y, 2, 1))
+        pygame.draw.rect(s, ink, (EYE_R - 2, BROW_Y, 2, 1))
+        pygame.draw.rect(s, ink, (EYE_R, BROW_Y + 2, 4, 1))
+        for x in (EYE_L - 1, EYE_R - 1):
+            pygame.draw.rect(s, white, (x, EYE_Y - 1, 4, 4))
+            pygame.draw.rect(s, ink, (x + 1, EYE_Y, 2, 2))
+        # Mouth open, jaw slack.
+        pygame.draw.rect(s, (58, 30, 34), (21, MOUTH_Y, 7, 3))
+        pygame.draw.rect(s, ink, (21, MOUTH_Y, 7, 1))
+        # Sweat, running off the temple.
+        pygame.draw.rect(s, (150, 205, 226), (36, 14, 1, 3))
+        s.set_at((36, 17), (198, 232, 244))
+    return s
+
+
+def _headwear(s, lg, kind):
+    band = lg["H"]
+    lit = lg["h"]
+    if kind == "patrol":  # Thorne — flat field cap, short bill
+        pygame.draw.rect(s, band, (13, 2, 22, 8))
+        pygame.draw.rect(s, lit, (13, 2, 22, 1))
+        pygame.draw.rect(s, INK, (13, 1, 22, 1))
+        pygame.draw.rect(s, band, (11, 9, 26, 2))
+        pygame.draw.rect(s, INK, (11, 11, 26, 1))
+    elif kind == "garrison":  # Doss — folded side cap, no bill
+        pygame.draw.polygon(s, band, [(13, 10), (18, 2), (30, 2), (35, 10)])
+        pygame.draw.polygon(s, INK, [(13, 10), (18, 2), (30, 2), (35, 10)], 1)
+        pygame.draw.line(s, lit, (19, 4), (29, 4))
+    elif kind == "peaked":  # Ashworth — officer's cap, badge and wide bill
+        pygame.draw.rect(s, band, (12, 1, 24, 7))
+        pygame.draw.rect(s, lit, (12, 1, 24, 1))
+        pygame.draw.rect(s, (74, 76, 92), (12, 8, 24, 3))  # cap band
+        pygame.draw.rect(s, BRASS, (23, 3, 3, 3))  # badge
+        pygame.draw.rect(s, BRASS_D, (23, 6, 3, 1))
+        # The bill has to stay lighter than the terminal background or the
+        # whole cap reads as floating clear of the head.
+        pygame.draw.rect(s, (58, 60, 74), (9, 11, 30, 2))  # bill
+        pygame.draw.rect(s, (86, 88, 104), (9, 11, 30, 1))
+        pygame.draw.rect(s, INK, (9, 13, 30, 1))
+    else:  # bricker — knit beanie, ribbed brim
+        pygame.draw.rect(s, band, (13, 3, 22, 8))
+        pygame.draw.rect(s, band, (15, 1, 18, 3))
+        pygame.draw.rect(s, lit, (15, 1, 18, 1))
+        pygame.draw.rect(s, INK, (15, 0, 18, 1))
+        pygame.draw.rect(s, lit, (12, 9, 24, 3))  # rolled brim
+        pygame.draw.rect(s, INK, (12, 12, 24, 1))
+        for x in range(13, 36, 3):
+            pygame.draw.rect(s, band, (x, 9, 1, 3))
+    return s
+
+
+def build_portrait(legend, hat, mood):
+    s = _bust_base(legend)
+    _face(s, legend, mood)
+    # Sideburns, under the hat brim — without them every head reads as shaved.
+    hair = legend["H"]
+    for x in (13, 34):
+        pygame.draw.rect(s, hair, (x, 13, 2, 5))
+    _headwear(s, legend, hat)
+    return s
+
+
+PORTRAIT_HATS = {
+    "thorne": "patrol",
+    "doss": "garrison",
+    "ashworth": "peaked",
+    "bricker": "beanie",
+}
+_PORTRAIT_LEGENDS = {
+    "thorne": THORNE,
+    "doss": DOSS,
+    "ashworth": ASHWORTH,
+    "bricker": BRICKER,
+}
+
+PORTRAITS = {
+    sid: {m: build_portrait(_PORTRAIT_LEGENDS[sid], PORTRAIT_HATS[sid], m)
+          for m in ("steady", "rattled", "cracking")}
+    for sid in _PORTRAIT_LEGENDS
+}

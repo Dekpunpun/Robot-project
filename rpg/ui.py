@@ -69,6 +69,45 @@ def wrap(s, width, size=8):
     return lines
 
 
+def header(surf, s, x, y, colour=ACCENT, size=8):
+    """Header text wearing a phosphor halo.
+
+    A CRT running bright amber blooms into the pixels around each glyph. Four
+    offset copies in a dim amber under the real text is enough to read as that
+    bloom without turning the letters to mush.
+    """
+    f = font(size)
+    halo = f.render(s, False, GLOW_AMBER)
+    for dx, dy in ((-1, 0), (1, 0), (0, -1), (0, 1)):
+        surf.blit(halo, (x + dx, y + dy))
+    surf.blit(f.render(s, False, colour), (x, y))
+    return f.size(s)[0]
+
+
+def terminal_frame(surf, label, tick, footer=None):
+    """Full-screen terminal chrome: housing, keyline, a title bar with a live
+    cursor, and an optional footer strip. The record screens all sit in this."""
+    surf.fill(UI_BG)
+    # Faint horizontal ruling, so empty areas still read as a screen.
+    for y in range(0, SCREEN_H, 4):
+        pygame.draw.line(surf, (26, 21, 18), (0, y), (SCREEN_W, y))
+    pygame.draw.rect(surf, UI_LINE, (6, 6, SCREEN_W - 12, SCREEN_H - 12), 1)
+    pygame.draw.rect(surf, UI_BG_2, (7, 7, SCREEN_W - 14, 13))
+    pygame.draw.line(surf, UI_HI, (7, 20), (SCREEN_W - 8, 20))
+    header(surf, label, 12, 9, ACCENT)
+    if (tick // 20) % 2 == 0:
+        pygame.draw.rect(surf, ACCENT, (SCREEN_W - 16, 10, 5, 7))
+    if footer:
+        pygame.draw.line(surf, UI_LINE, (7, SCREEN_H - 20), (SCREEN_W - 8, SCREEN_H - 20))
+        text(surf, footer, 12, SCREEN_H - 16, UI_FAINT)
+
+
+def caret(surf, x, y, tick, colour=ACCENT):
+    """The blinking block cursor at the end of a typed line."""
+    if (tick // 16) % 2 == 0:
+        pygame.draw.rect(surf, colour, (x, y, 5, 8))
+
+
 def panel(surf, rect, fill=UI_BG, light=UI_HI, dark=INK):
     """A sunk-and-lit box. Two edges lit, two in shadow, one black keyline."""
     x, y, w, h = rect

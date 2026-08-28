@@ -81,14 +81,20 @@ BLOOD = (128, 34, 38)
 PAPER = (232, 226, 206)
 PAPER_D = (196, 188, 164)
 
-UI_BG = (22, 20, 36)
-UI_BG_2 = (34, 32, 56)
-UI_LINE = (92, 90, 132)
-UI_HI = (128, 126, 176)
-UI_TEXT = (233, 231, 214)
-UI_DIM = (152, 160, 204)
-UI_FAINT = (98, 106, 155)
-ACCENT = (255, 204, 51)
+# --- UI: the Third Precinct terminal ------------------------------------------
+# Amber phosphor on warm charcoal, to match the lamplight rather than fight it.
+# Headers and chrome are amber; body copy stays near-white, because a case file
+# is a wall of 8px text and pure amber would be unreadable at that size.
+
+UI_BG = (20, 16, 14)  # terminal housing
+UI_BG_2 = (34, 27, 21)  # raised row / current selection
+UI_LINE = (134, 88, 32)  # keyline, unlit
+UI_HI = (198, 136, 46)  # keyline, lit edge
+UI_TEXT = (238, 228, 208)
+UI_DIM = (198, 152, 94)
+UI_FAINT = (124, 94, 60)
+ACCENT = (255, 182, 66)
+GLOW_AMBER = (150, 92, 24)  # halo drawn under header text
 DANGER = (228, 69, 58)
 COOL = (79, 195, 247)
 GREEN = (106, 212, 106)

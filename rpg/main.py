@@ -65,6 +65,25 @@ class Game:
         self.zone_id = self.world.zone_at(self.player.x, self.player.y)
         self.transition = None
 
+        # Weather. One condition at a time, re-rolled every few minutes with a
+        # crossfade so it never snaps. Drops and fog banks are laid out once
+        # here and animated by clock, which keeps the per-frame cost to blits.
+        wr = random.Random(7)
+        self.weather = "clear"
+        self.weather_next = None
+        self.weather_fade = 1.0
+        self.weather_timer = wr.uniform(*self.WEATHER_EVERY)
+        self.raindrops = [
+            (wr.randrange(-60, SCREEN_W + 60), wr.randrange(0, SCREEN_H),
+             wr.uniform(300.0, 460.0), wr.randrange(4, 10))
+            for _ in range(110)
+        ]
+        self.fogbanks = [
+            (wr.randrange(0, SCREEN_W), wr.randrange(30, SCREEN_H - 20), wr.uniform(6.0, 15.0))
+            for _ in range(5)
+        ]
+        self.fog_blob = art.make_light(84, colour=(170, 174, 194), strength=120)
+
         self.npcs = {}
         for sid, spot in self.world.npc_spots.items():
             calm, broken = art.NPC_ART[SUSPECTS_BY_ID[sid]["sprite"]]
@@ -219,6 +238,57 @@ class Game:
             composite.set_at((px, py), ACCENT)
         ui.panel(self.scene, (6, 6, MAP_W + 6, MAP_H + 6), UI_BG, UI_LINE)
         self.scene.blit(composite, (9, 9))
+
+    # -- weather -----------------------------------------------------------
+
+    WEATHER_EVERY = (300.0, 600.0)  # seconds between rolls: 5 to 10 minutes
+    WEATHER_FADE = 3.0
+
+    def _update_weather(self, dt):
+        if self.weather_next is None:
+            self.weather_timer -= dt
+            if self.weather_timer <= 0:
+                self.weather_next = random.choice(
+                    [w for w in ("clear", "rain", "fog") if w != self.weather]
+                )
+            elif self.weather_fade < 1.0:
+                self.weather_fade = min(1.0, self.weather_fade + dt / self.WEATHER_FADE)
+            return
+        # Fading the old condition out; the swap happens at the bottom of the dip.
+        self.weather_fade -= dt / self.WEATHER_FADE
+        if self.weather_fade <= 0.0:
+            self.weather_fade = 0.0
+            self.weather = self.weather_next
+            self.weather_next = None
+            self.weather_timer = random.uniform(*self.WEATHER_EVERY)
+
+    def draw_weather(self):
+        if self.weather == "clear" or self.weather_fade <= 0.02:
+            return
+        strength = self.weather_fade
+        # Indoors you only catch it through the windows.
+        if self.world.zone_at(self.player.x, self.player.y) is not None:
+            strength *= 0.22
+        layer = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
+        t = self.tick / 60.0
+
+        if self.weather == "rain":
+            span = SCREEN_H + 24
+            colour = (168, 196, 224, int(150 * strength))
+            for x0, y0, speed, length in self.raindrops:
+                y = (y0 + t * speed) % span - 12
+                x = (x0 + t * speed * 0.22) % (SCREEN_W + 80) - 40
+                pygame.draw.line(layer, colour, (x, y), (x - 2, y - length))
+        else:  # fog
+            # A flat haze carries the condition; the banks give it movement.
+            layer.fill((152, 158, 178, int(54 * strength)))
+            self.fog_blob.set_alpha(int(255 * strength))
+            r = self.fog_blob.get_width() // 2
+            for x0, y0, speed in self.fogbanks:
+                x = (x0 + t * speed) % (SCREEN_W + 2 * r) - r
+                y = y0 + math.sin(t * 0.12 + x0) * 6
+                layer.blit(self.fog_blob, (int(x) - r, int(y) - r))
+        self.scene.blit(layer, (0, 0))
 
     # -- entering a building ---------------------------------------------
 
@@ -622,6 +692,9 @@ class Game:
         if result:
             self.receive(*result)
 
+        if self.state in (PLAYING, TALKING):
+            self._update_weather(dt)
+
         if self.transition:
             self._update_transition(dt)
             self.player.moving = False
@@ -713,6 +786,7 @@ class Game:
             special_flags=pygame.BLEND_RGBA_SUB,
         )
         s.blit(dark, (0, 0))
+        self.draw_weather()
 
     def draw_hud(self):
         s = self.scene
@@ -732,15 +806,25 @@ class Game:
         suspect = SUSPECTS_BY_ID[sid]
         c = self.convo[sid]
         name = suspect["name"].upper()
-        ui.panel(s, (6, 6, SCREEN_W - 12, 22), UI_BG, UI_LINE)
-        ui.text(s, name, 12, 10, UI_TEXT)
-        label = {"steady": "COMPOSED", "rattled": "RATTLED", "cracking": "CRACKING"}[c["composure"]]
+        label = {"steady": "CALM", "rattled": "RATTLED", "cracking": "CRACKING"}[c["composure"]]
         col = {"steady": UI_DIM, "rattled": ACCENT, "cracking": DANGER}[c["composure"]]
         if c["composure"] == "cracking" and (self.tick // 16) % 2 == 0:
             col = UI_TEXT
-        ui.text(s, label, 12 + ui.text_w(name) + 12, 10, col)
-        ui.meter(s, SCREEN_W - 100, 11, c["pressure"])
-        ui.text(s, f"{int(c['pressure']):3d}%", SCREEN_W - 30, 10, UI_DIM)
+
+        # Header: name on the left, pressure read-out on the right. The name is
+        # clipped to whatever the meter leaves, so a long rank never runs under it.
+        ui.panel(s, (6, 6, SCREEN_W - 12, 20), UI_BG, UI_LINE)
+        ui.text(s, name[: (SCREEN_W - 162) // 8], 12, 10, UI_TEXT)
+        ui.meter(s, SCREEN_W - 128, 9, c["pressure"])
+        ui.text(s, f"{int(c['pressure']):3d}%", SCREEN_W - 40, 10, UI_DIM)
+
+        # Portrait, reacting to composure. It borrows the world sprite's shake
+        # so a landed piece of evidence hits the face as well as the body.
+        portrait = art.PORTRAITS[sid][c["composure"]]
+        ox = (1 if (self.tick // 2) % 2 else -1) if self.npcs[sid].shake > 0 else 0
+        ui.panel(s, (8, 30, 68, 76), UI_BG, UI_LINE)
+        s.blit(portrait, (18 + ox, 34))
+        ui.text(s, label, 8 + (68 - ui.text_w(label)) // 2, 90, col)
 
         if self.ai.busy:
             secs = (pygame.time.get_ticks() - (self.waiting_since or 0)) // 1000
@@ -768,9 +852,9 @@ class Game:
 
         if self.talk_mode == "input":
             ui.panel(s, (12, SCREEN_H - 40, SCREEN_W - 24, 32))
-            caret = "_" if (self.tick // 16) % 2 == 0 else " "
-            shown = self.typed[-40:]
-            ui.text(s, "> " + shown + caret, 20, SCREEN_H - 32, UI_TEXT)
+            shown = "> " + self.typed[-40:]
+            ui.text(s, shown, 20, SCREEN_H - 32, UI_TEXT)
+            ui.caret(s, 20 + ui.text_w(shown) + 1, SCREEN_H - 32, self.tick)
             ui.text(s, "ENTER ASK    ESC BACK", 20, SCREEN_H - 18, UI_FAINT)
             return
 
@@ -782,85 +866,81 @@ class Game:
 
     def draw_accuse(self):
         s = self.scene
-        s.fill(UI_BG)
-        ui.panel(s, (8, 8, SCREEN_W - 16, SCREEN_H - 16), UI_BG, UI_LINE)
         suspects = CASE["suspects"]
 
         if self.accuse_confirm is None:
-            ui.text(s, "WHO DID THIS?", 18, 16, ACCENT)
-            y = 40
+            ui.terminal_frame(s, "HRPD // FILE CHARGES", self.tick, "ENTER ACCUSE   TAB BACK")
+            y = self._section("NAME ONE", 28)
             for i, sp in enumerate(suspects):
                 sel = i == self.accuse_index
                 if sel:
-                    pygame.draw.rect(s, UI_BG_2, (14, y - 3, SCREEN_W - 28, 30))
-                    ui.text(s, ">", 18, y + 4, ACCENT)
-                ui.text(s, sp["name"], 28, y, UI_TEXT if sel else UI_DIM)
-                ui.text(s, sp["role"], 28, y + 12, UI_FAINT)
-                y += 34
-            ui.text(s, "ENTER ACCUSE   TAB BACK", 18, SCREEN_H - 20, UI_FAINT)
+                    pygame.draw.rect(s, UI_BG_2, (12, y - 3, SCREEN_W - 24, 26))
+                    pygame.draw.rect(s, UI_LINE, (12, y - 3, SCREEN_W - 24, 26), 1)
+                    ui.text(s, ">", 16, y + 2, ACCENT)
+                ui.text(s, sp["name"], 26, y, UI_TEXT if sel else UI_DIM)
+                ui.text(s, ui.wrap(sp["role"], SCREEN_W - 40)[0], 26, y + 11, UI_FAINT)
+                y += 30
             return
 
         accused = SUSPECTS_BY_ID[self.accuse_confirm]
-        ui.text(s, f"ACCUSE {accused['name'].upper()}?", 18, 16, DANGER)
-        for i, line in enumerate(
-            ui.wrap(
-                "This is your one shot. Once you name someone, the case closes tonight, "
-                "for better or worse.",
-                SCREEN_W - 44,
-            )
+        ui.terminal_frame(s, "HRPD // CONFIRM", self.tick, "Y  ACCUSE      N  NOT YET")
+        ui.header(s, f"ACCUSE {accused['name'].upper()}?", 14, 30, DANGER)
+        y = 52
+        for line in ui.wrap(
+            "This is your one shot. Once you name someone, the case closes tonight, "
+            "for better or worse.",
+            SCREEN_W - 40,
         ):
-            ui.text(s, line, 18, 40 + i * 11, UI_DIM)
-        ui.text(s, "Y  ACCUSE     N  NOT YET", 18, SCREEN_H - 20, ACCENT)
+            ui.text(s, line, 18, y, UI_DIM)
+            y += 11
+
+    def _section(self, label, y):
+        """An amber section header with a rule running out to the margin."""
+        s = self.scene
+        ui.text(s, label, 14, y, ACCENT)
+        pygame.draw.line(s, UI_LINE, (18 + ui.text_w(label), y + 4), (SCREEN_W - 15, y + 4))
+        return y + 12
 
     def draw_casefile(self):
         s = self.scene
-        s.fill(UI_BG)
-        ui.panel(s, (8, 8, SCREEN_W - 16, SCREEN_H - 16), UI_BG, UI_LINE)
+        footer = (
+            f"{self.casefile_page + 1}/{len(self.found) + 1}   "
+            "ARROWS PAGE   A ACCUSE   TAB CLOSE"
+        )
         if self.casefile_page == 0:
-            ui.text(s, "CASE FILE - " + CASE["title"].upper(), 18, 16, ACCENT)
-            y = 32
-            ui.text(s, "VICTIM", 18, y, UI_DIM)
-            y += 12
-            for line in ui.wrap(f"{CASE['victim']['name']}. {CASE['victim']['detail']}", SCREEN_W - 44):
+            ui.terminal_frame(s, "HRPD // CASE FILE 44-C", self.tick, footer)
+            y = self._section("VICTIM", 28)
+            for line in ui.wrap(f"{CASE['victim']['name']}. {CASE['victim']['detail']}", SCREEN_W - 40):
                 ui.text(s, line, 18, y)
-                y += 11
-            y += 5
-            ui.text(s, "SUSPECTS", 18, y, UI_DIM)
-            y += 12
+                y += 10
+            y = self._section("SUSPECTS", y + 6)
             for sp in CASE["suspects"]:
                 ui.text(s, sp["name"], 18, y, UI_TEXT)
-                y += 11
-                ui.text(s, ui.wrap(sp["role"], SCREEN_W - 44)[0], 18, y, UI_FAINT)
-                y += 11
+                y += 10
+                ui.text(s, ui.wrap(sp["role"], SCREEN_W - 34)[0], 18, y, UI_FAINT)
+                y += 12
         else:
             ev = EVIDENCE_BY_ID[self.found[self.casefile_page - 1]]
-            ui.text(s, f"EXHIBIT {self.casefile_page}", 18, 16, ACCENT)
-            ui.text(s, ev["name"].upper()[:36], 18, 32, UI_TEXT)
-            y = 52
-            for line in ui.wrap(ev["detail"], SCREEN_W - 44):
+            ui.terminal_frame(s, f"HRPD // EXHIBIT {self.casefile_page}", self.tick, footer)
+            ui.text(s, ev["name"].upper()[:36], 14, 28, UI_TEXT)
+            y = 44
+            for line in ui.wrap(ev["detail"], SCREEN_W - 40):
                 ui.text(s, line, 18, y)
-                y += 11
-            y += 8
-            ui.text(s, "CONTRADICTS", 18, y, UI_DIM)
-            y += 12
-            for line in ui.wrap(ev["contradicts"], SCREEN_W - 44):
+                y += 10
+            y = self._section("CONTRADICTS", y + 6)
+            for line in ui.wrap(ev["contradicts"], SCREEN_W - 40):
                 ui.text(s, line, 18, y, ACCENT)
-                y += 11
+                y += 10
             if any(ev["id"] in c["presented"] for c in self.convo.values()):
-                ui.text(s, "PRESENTED", 18, SCREEN_H - 40, GREEN)
-        ui.text(
-            s,
-            f"{self.casefile_page + 1}/{len(self.found) + 1}   ARROWS PAGE   A ACCUSE   TAB CLOSE",
-            18,
-            SCREEN_H - 24,
-            UI_FAINT,
-        )
+                ui.text(s, "[ PRESENTED ]", 14, SCREEN_H - 34, GREEN)
 
     def draw_title(self):
         s = self.scene
-        s.fill((12, 13, 26))
+        s.fill(UI_BG)
         for y in range(0, SCREEN_H, 2):
-            pygame.draw.line(s, (16, 18, 34), (0, y), (SCREEN_W, y))
+            pygame.draw.line(s, (27, 21, 18), (0, y), (SCREEN_W, y))
+        boot = "HARROW'S REACH P.D.  //  CASE 44-C"
+        ui.text(s, boot, (SCREEN_W - ui.text_w(boot)) // 2, 12, UI_FAINT)
         big = ui.font(20)
         for i, word in enumerate(CASE["meta"]["title_lines"]):
             w = big.size(word)[0]
@@ -886,8 +966,8 @@ class Game:
 
     def draw_ending(self):
         s = self.scene
-        s.fill(UI_BG)
         e = self.ending
+        ui.terminal_frame(s, "HRPD // DISPOSITION", self.tick, "ENTER  NEW CASE")
         heads = {
             "correct_strong": ("CASE CLOSED", GREEN),
             "wrong_suspect": ("CASE GONE COLD", DANGER),
@@ -896,27 +976,33 @@ class Game:
         head, head_col = heads[e["shape"]]
         big = ui.font(16)
         w = big.size(head)[0]
-        s.blit(big.render(head, False, INK), ((SCREEN_W - w) // 2 + 2, 20))
-        s.blit(big.render(head, False, head_col), ((SCREEN_W - w) // 2, 18))
+        s.blit(big.render(head, False, INK), ((SCREEN_W - w) // 2 + 2, 30))
+        s.blit(big.render(head, False, head_col), ((SCREEN_W - w) // 2, 28))
 
-        y = 46
+        # The grade sits as a badge beside the caption rather than as a hero
+        # panel: the prose is the payoff here, and it needs the vertical room.
+        y = 50
+        cx = 14
         if e["grade"]:
-            grade = ui.font(32)
-            gw = grade.size(e["grade"])[0]
-            ui.panel(s, ((SCREEN_W - gw) // 2 - 10, y, gw + 20, 44), (18, 16, 30), UI_LINE)
-            s.blit(grade.render(e["grade"], False, ACCENT), ((SCREEN_W - gw) // 2, y + 6))
-            y += 44
-        ui.text(s, e["caption"], (SCREEN_W - ui.text_w(e["caption"])) // 2, y + 4, UI_TEXT)
+            gf = ui.font(16)
+            gw = gf.size(e["grade"])[0]
+            ui.panel(s, (14, y, gw + 16, 22), UI_BG_2, UI_HI)
+            s.blit(gf.render(e["grade"], False, ACCENT), (22, y + 3))
+            cx = 14 + gw + 26
+        ui.text(s, e["caption"], cx, y + 7, UI_TEXT)
+        y += 28
 
         turns = sum(c["turns"] for c in self.convo.values())
         stat = f"{turns} QUESTIONS   {len(self.found)}/{len(CASE['evidence'])} FOUND"
-        ui.text(s, stat, (SCREEN_W - ui.text_w(stat)) // 2, y + 20, UI_DIM)
+        ui.text(s, stat, 14, y, UI_DIM)
+        y += 16
 
-        ty = y + 42
-        for line in ui.wrap(e["prose"], SCREEN_W - 44):
-            ui.text(s, line, 18, ty, UI_DIM)
-            ty += 11
-        ui.text(s, "ENTER  NEW CASE", 18, SCREEN_H - 20, ACCENT)
+        # Clamped to the space above the footer so a long ending can never
+        # spill over the chrome.
+        room = (SCREEN_H - 26 - y) // 10
+        for line in ui.wrap(e["prose"], SCREEN_W - 34)[:room]:
+            ui.text(s, line, 14, y, UI_DIM)
+            y += 10
 
     def draw(self):
         if self.state == TITLE_SCREEN:
