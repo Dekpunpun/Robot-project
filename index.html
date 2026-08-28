@@ -1,0 +1,121 @@
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>The Last Exhibit</title>
+<link rel="stylesheet" href="css/styles.css" />
+
+<!-- ============ TITLE SCREEN ============ -->
+<div id="titleScreen">
+  <div class="title-inner">
+    <p class="title-kicker">THORNE MUSEUM HOMICIDE UNIT</p>
+    <h1 class="title-logo">THE LAST<br /><span>EXHIBIT</span></h1>
+    <p class="title-sub">an interrogation</p>
+    <canvas id="titlePortrait" width="192" height="192"></canvas>
+    <p class="title-start">PRESS ENTER TO BEGIN</p>
+    <p class="title-foot">ONE SUSPECT &middot; FIVE CLUES &middot; ONE VERDICT</p>
+  </div>
+</div>
+
+<header id="topbar">
+  <div class="brand">
+    <span class="badge">CASE 4417</span>
+    <h1 id="caseTitle">The Last Exhibit</h1>
+  </div>
+
+  <div class="meter" title="Rises when you catch the suspect in a contradiction">
+    <label>Pressure</label>
+    <div class="meter-track" id="meterCells"></div>
+    <span id="meterValue">0%</span>
+  </div>
+
+  <div class="topbar-actions">
+    <button id="accuseBtn" class="btn btn-danger">Accuse</button>
+    <button id="muteBtn" class="btn btn-ghost" title="Sound on">SFX</button>
+    <button id="settingsBtn" class="btn btn-ghost" title="LLM connection">CFG</button>
+  </div>
+</header>
+
+<main id="board">
+  <!-- ============ CASE FILE ============ -->
+  <section id="casefile" class="panel">
+    <div class="panel-head"><h2>Case File</h2></div>
+    <div class="panel-body" id="casefileBody"><!-- filled by JS --></div>
+  </section>
+
+  <!-- ============ INTERROGATION ============ -->
+  <section id="chat" class="panel">
+    <div class="stage">
+      <canvas id="portrait" width="192" height="192"></canvas>
+      <div class="stage-info">
+        <h2 id="suspectName">Interrogation</h2>
+        <p id="suspectRole" class="stage-role"></p>
+        <span id="suspectStatus" class="status steady">composed</span>
+      </div>
+    </div>
+    <div class="panel-body" id="chatLog"><!-- messages --></div>
+    <form id="chatForm" class="chat-input">
+      <input id="chatInput" type="text" autocomplete="off" maxlength="240"
+             placeholder="Ask a question..." />
+      <button type="submit" class="btn btn-primary" id="sendBtn">Ask</button>
+    </form>
+  </section>
+
+  <!-- ============ EVIDENCE ============ -->
+  <section id="evidence" class="panel">
+    <div class="panel-head"><h2>Evidence</h2></div>
+    <div class="panel-body" id="evidenceBody"><!-- filled by JS --></div>
+  </section>
+</main>
+
+<!-- ============ ACCUSATION MODAL ============ -->
+<div id="accuseModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>Final Accusation</h2>
+    <p id="accuseText"></p>
+    <div class="accuse-choices">
+      <button class="btn btn-danger" data-verdict="guilty">Guilty</button>
+      <button class="btn btn-ghost" data-verdict="innocent">Innocent</button>
+    </div>
+    <button class="modal-close btn btn-ghost" data-close>Keep interrogating</button>
+  </div>
+</div>
+
+<!-- ============ RESULT MODAL ============ -->
+<div id="resultModal" class="modal hidden">
+  <div class="modal-card">
+    <h2 id="resultTitle"></h2>
+    <div id="resultRank" class="rank"></div>
+    <p id="resultText"></p>
+    <div id="resultSolution" class="solution"></div>
+    <button class="btn btn-primary" id="restartBtn">New Interrogation</button>
+  </div>
+</div>
+
+<!-- ============ SETTINGS MODAL ============ -->
+<div id="settingsModal" class="modal hidden">
+  <div class="modal-card">
+    <h2>LLM Connection</h2>
+    <label class="field">Base URL
+      <input id="cfgBaseUrl" type="text" />
+    </label>
+    <label class="field">Model
+      <input id="cfgModel" type="text" placeholder="(auto-detect from /models)" />
+    </label>
+    <label class="field">API Key (optional)
+      <input id="cfgKey" type="text" placeholder="lm-studio" />
+    </label>
+    <div class="settings-actions">
+      <button class="btn btn-ghost" id="cfgDetect">Detect models</button>
+      <span id="cfgStatus" class="hint"></span>
+    </div>
+    <button class="btn btn-primary" id="cfgSave">Save</button>
+    <button class="modal-close btn btn-ghost" data-close>Cancel</button>
+  </div>
+</div>
+
+<div id="crt" aria-hidden="true"></div>
+
+<script src="js/case.js"></script>
+<script src="js/sprite.js"></script>
+<script src="js/audio.js"></script>
+<script src="js/api.js"></script>
+<script src="js/game.js"></script>

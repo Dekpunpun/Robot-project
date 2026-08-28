@@ -1,0 +1,755 @@
+/* ---------------------------------------------------------------------------
+ * The Last Exhibit — 8-bit interrogation
+ *
+ * House rules for the look: no rounded corners, no gradients, no soft shadows.
+ * Depth comes from hard 3px bevels, and everything sits on a 3px grid.
+ * ------------------------------------------------------------------------- */
+
+@font-face {
+  font-family: "PressStart";
+  src: url("../fonts/PressStart2P.woff2") format("woff2");
+  font-display: swap;
+}
+
+:root {
+  --bg: #0a0b12;
+  --panel: #171a2c;
+  --panel-2: #1f2340;
+  --sunk: #0d0f1c;
+  --line: #3b4370;
+  --hi: #59639e;
+  --lo: #070810;
+
+  --ink: #e9e7d6;
+  --ink-dim: #98a0cc;
+  --ink-faint: #626a9b;
+
+  --accent: #ffcc33;
+  --accent-lo: #a37800;
+  --danger: #e4453a;
+  --danger-lo: #8c1e18;
+  --cool: #4fc3f7;
+  --cool-lo: #1c6d94;
+  --green: #6ad46a;
+
+  --px: "PressStart", "Courier New", monospace;
+  --body: ui-monospace, SFMono-Regular, Menlo, "Courier New", monospace;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 13px;
+  overflow: hidden;
+  image-rendering: pixelated;
+}
+
+/* Everything is snapped to whole pixels — no subpixel smoothing anywhere. */
+canvas { image-rendering: pixelated; image-rendering: crisp-edges; }
+
+/* ------------------------------- CRT overlay ----------------------------- */
+
+#crt {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background:
+    repeating-linear-gradient(
+      180deg,
+      rgba(0, 0, 0, 0.22) 0px,
+      rgba(0, 0, 0, 0.22) 1px,
+      transparent 1px,
+      transparent 3px
+    );
+  mix-blend-mode: multiply;
+}
+
+#crt::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(ellipse at center, transparent 55%, rgba(0, 0, 0, 0.55) 100%);
+}
+
+/* -------------------------------- bevels --------------------------------- */
+
+/* Raised: light on the top-left, black on the bottom-right. */
+.bevel {
+  box-shadow:
+    inset 3px 3px 0 0 var(--hi),
+    inset -3px -3px 0 0 var(--lo),
+    0 0 0 3px #000;
+}
+
+/* Sunken: the same trick inverted, for anything you type or read into. */
+.bevel-in {
+  box-shadow:
+    inset 3px 3px 0 0 var(--lo),
+    inset -3px -3px 0 0 var(--hi),
+    0 0 0 3px #000;
+}
+
+/* ------------------------------ title screen ----------------------------- */
+
+#titleScreen {
+  position: fixed;
+  inset: 0;
+  z-index: 900;
+  background: var(--bg);
+  display: grid;
+  place-items: center;
+  text-align: center;
+  padding: 24px;
+  overflow: auto;
+}
+#titleScreen.gone { display: none; }
+
+.title-inner { max-width: 640px; }
+
+.title-kicker {
+  font-family: var(--px);
+  font-size: 9px;
+  letter-spacing: 2px;
+  color: var(--ink-faint);
+  margin: 0 0 20px;
+}
+
+.title-logo {
+  font-family: var(--px);
+  font-size: 40px;
+  line-height: 1.34;
+  margin: 0;
+  color: var(--ink);
+  text-shadow: 5px 5px 0 #000, 10px 10px 0 var(--sunk);
+}
+.title-logo span { color: var(--accent); }
+
+.title-sub {
+  font-family: var(--px);
+  font-size: 11px;
+  letter-spacing: 3px;
+  color: var(--danger);
+  margin: 22px 0 0;
+  text-shadow: 3px 3px 0 #000;
+}
+
+#titlePortrait {
+  display: block;
+  margin: 26px auto 22px;
+  background: var(--panel);
+  box-shadow: inset 3px 3px 0 0 var(--hi), inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+
+.title-start {
+  font-family: var(--px);
+  font-size: 13px;
+  color: var(--accent);
+  margin: 0 0 22px;
+  animation: flash 1.05s steps(1, end) infinite;
+}
+/* Weighted on rather than a even 50/50 — a prompt should read as an
+   invitation, not a strobe. */
+@keyframes flash { 0%, 65% { opacity: 1; } 65.01%, 100% { opacity: 0; } }
+
+.title-foot {
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--ink-faint);
+  margin: 0;
+}
+
+/* --------------------------------- topbar -------------------------------- */
+
+#topbar {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 10px 14px;
+  background: var(--panel-2);
+  border-bottom: 3px solid #000;
+  flex: none;
+}
+
+.brand { display: flex; align-items: center; gap: 12px; min-width: 0; }
+
+.brand h1 {
+  margin: 0;
+  font-family: var(--px);
+  font-size: 13px;
+  font-weight: normal;
+  color: var(--ink);
+  text-shadow: 2px 2px 0 #000;
+  white-space: nowrap;
+}
+
+.badge {
+  font-family: var(--px);
+  font-size: 8px;
+  color: #241c00;
+  background: var(--accent);
+  padding: 5px 6px;
+  box-shadow: inset 2px 2px 0 0 #ffe89a, inset -2px -2px 0 0 var(--accent-lo), 0 0 0 2px #000;
+}
+
+/* ----- pressure meter: discrete cells, because a smooth bar isn't 8-bit --- */
+
+.meter { display: flex; align-items: center; gap: 10px; margin-left: auto; }
+
+.meter label {
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: 1px;
+  color: var(--ink-dim);
+  text-transform: uppercase;
+}
+
+.meter-track {
+  display: flex;
+  gap: 2px;
+  padding: 3px;
+  background: var(--sunk);
+  box-shadow: inset 2px 2px 0 0 var(--lo), inset -2px -2px 0 0 var(--line), 0 0 0 2px #000;
+}
+
+.cell {
+  width: 7px;
+  height: 14px;
+  background: #191c30;
+}
+.cell.on { background: var(--cool); box-shadow: inset 0 -3px 0 0 var(--cool-lo); }
+.cell.on[data-level="mid"] { background: var(--accent); box-shadow: inset 0 -3px 0 0 var(--accent-lo); }
+.cell.on[data-level="high"] { background: var(--danger); box-shadow: inset 0 -3px 0 0 var(--danger-lo); }
+
+/* The newest cell pops, so a gain is visible without watching the number. */
+.cell.fresh { animation: pop 0.45s steps(2, end) 3; }
+@keyframes pop { 0% { filter: brightness(2.4); } 100% { filter: none; } }
+
+#meterValue {
+  font-family: var(--px);
+  font-size: 9px;
+  color: var(--ink-dim);
+  width: 40px;
+}
+
+.topbar-actions { display: flex; gap: 7px; }
+
+/* -------------------------------- buttons -------------------------------- */
+
+.btn {
+  font-family: var(--px);
+  font-size: 9px;
+  line-height: 1.5;
+  padding: 9px 11px;
+  border: none;
+  background: var(--panel-2);
+  color: var(--ink);
+  cursor: pointer;
+  text-transform: uppercase;
+  box-shadow: inset 3px 3px 0 0 var(--hi), inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+
+/* Pressing physically sinks the button: bevel flips, whole thing shifts down. */
+.btn:active:not(:disabled) {
+  transform: translate(2px, 2px);
+  box-shadow: inset -3px -3px 0 0 var(--hi), inset 3px 3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+.btn:hover:not(:disabled) { background: #2a2f52; }
+.btn:disabled { opacity: 0.4; cursor: default; }
+.btn:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
+
+.btn-primary {
+  background: var(--accent);
+  color: #241c00;
+  box-shadow: inset 3px 3px 0 0 #ffe89a, inset -3px -3px 0 0 var(--accent-lo), 0 0 0 3px #000;
+}
+.btn-primary:hover:not(:disabled) { background: #ffd85e; }
+.btn-primary:active:not(:disabled) {
+  box-shadow: inset -3px -3px 0 0 #ffe89a, inset 3px 3px 0 0 var(--accent-lo), 0 0 0 3px #000;
+}
+
+.btn-danger {
+  background: var(--danger);
+  color: #240604;
+  box-shadow: inset 3px 3px 0 0 #ff8a80, inset -3px -3px 0 0 var(--danger-lo), 0 0 0 3px #000;
+}
+.btn-danger:hover:not(:disabled) { background: #f0594e; }
+.btn-danger:active:not(:disabled) {
+  box-shadow: inset -3px -3px 0 0 #ff8a80, inset 3px 3px 0 0 var(--danger-lo), 0 0 0 3px #000;
+}
+
+.btn-ghost { background: var(--panel); }
+
+/* Muted reads as struck through, not as a different icon. */
+#muteBtn.off { color: var(--ink-faint); text-decoration: line-through; }
+
+/* --------------------------------- layout -------------------------------- */
+
+#board {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 300px minmax(0, 1fr) 320px;
+  gap: 3px;
+  background: #000;
+  min-height: 0;
+  padding: 3px;
+}
+
+/* A hit lands as a screen shake — three hard steps, no easing. */
+#board.shake { animation: shake 0.26s steps(2, end) 2; }
+@keyframes shake {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-3px, 2px); }
+  50% { transform: translate(3px, -2px); }
+  75% { transform: translate(-2px, -2px); }
+  100% { transform: translate(0, 0); }
+}
+
+.panel {
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  min-width: 0;
+  box-shadow: inset 3px 3px 0 0 var(--hi), inset -3px -3px 0 0 var(--lo);
+}
+
+.panel-head {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 11px 13px;
+  background: var(--panel-2);
+  border-bottom: 3px solid #000;
+}
+
+.panel-head h2 {
+  margin: 0;
+  font-family: var(--px);
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--accent);
+  font-weight: normal;
+  text-shadow: 2px 2px 0 #000;
+}
+
+.panel-body { flex: 1; overflow-y: auto; padding: 14px; min-height: 0; }
+
+.panel-body::-webkit-scrollbar { width: 12px; }
+.panel-body::-webkit-scrollbar-track { background: var(--sunk); }
+.panel-body::-webkit-scrollbar-thumb {
+  background: var(--line);
+  box-shadow: inset 2px 2px 0 0 var(--hi), inset -2px -2px 0 0 var(--lo);
+}
+
+/* ------------------------------- case file ------------------------------- */
+
+.cf-block { margin-bottom: 20px; }
+
+.cf-block h3 {
+  margin: 0 0 8px;
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--cool);
+  font-weight: normal;
+}
+
+.cf-block p { margin: 0 0 4px; line-height: 1.6; color: #c6c8dd; font-size: 12px; }
+
+.cf-name {
+  font-family: var(--px);
+  font-size: 10px !important;
+  line-height: 1.6 !important;
+  color: var(--ink) !important;
+}
+.cf-sub { color: var(--ink-dim) !important; font-size: 11.5px !important; }
+
+.timeline { list-style: none; margin: 0; padding: 0; }
+
+.timeline li {
+  display: flex;
+  gap: 8px;
+  padding: 6px 0;
+  border-bottom: 2px dotted #2b3053;
+  font-size: 11.5px;
+  line-height: 1.55;
+  color: #b7bad2;
+}
+.timeline li:last-child { border-bottom: none; }
+
+.t-time {
+  font-family: var(--px);
+  font-size: 8px;
+  color: var(--accent);
+  flex: none;
+  padding-top: 2px;
+  min-width: 72px;
+}
+
+.facts { margin: 0; padding: 0; list-style: none; }
+.facts li {
+  font-size: 11.5px;
+  line-height: 1.6;
+  color: #b7bad2;
+  margin-bottom: 7px;
+  padding-left: 14px;
+  position: relative;
+}
+.facts li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 6px;
+  width: 5px;
+  height: 5px;
+  background: var(--ink-faint);
+}
+
+/* --------------------------------- stage --------------------------------- */
+
+.stage {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 14px;
+  background: var(--panel-2);
+  border-bottom: 3px solid #000;
+}
+
+#portrait {
+  width: 96px;
+  height: 96px;
+  flex: none;
+  background: #101326;
+  box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px #000;
+}
+
+.stage-info { min-width: 0; }
+
+.stage-info h2 {
+  margin: 0 0 7px;
+  font-family: var(--px);
+  font-size: 12px;
+  font-weight: normal;
+  color: var(--ink);
+  text-shadow: 2px 2px 0 #000;
+}
+
+.stage-role { margin: 0 0 10px; font-size: 11px; color: var(--ink-dim); }
+
+.status {
+  display: inline-block;
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  padding: 6px 7px;
+  color: #0a0b12;
+}
+.status.steady { background: var(--cool); box-shadow: inset 2px 2px 0 0 #a5e4ff, inset -2px -2px 0 0 var(--cool-lo), 0 0 0 2px #000; }
+.status.rattled { background: var(--accent); box-shadow: inset 2px 2px 0 0 #ffe89a, inset -2px -2px 0 0 var(--accent-lo), 0 0 0 2px #000; }
+.status.cracking {
+  background: var(--danger);
+  color: #fff;
+  box-shadow: inset 2px 2px 0 0 #ff8a80, inset -2px -2px 0 0 var(--danger-lo), 0 0 0 2px #000;
+  animation: flash 0.7s steps(1, end) infinite;
+}
+
+/* ---------------------------------- chat --------------------------------- */
+
+#chatLog { display: flex; flex-direction: column; gap: 12px; padding: 16px; }
+
+.msg { display: flex; gap: 9px; max-width: 88%; }
+.msg-player { margin-left: auto; flex-direction: row-reverse; }
+
+.bubble {
+  padding: 11px 13px;
+  line-height: 1.75;
+  font-size: 12px;
+  white-space: pre-wrap;
+  box-shadow: inset 3px 3px 0 0 var(--hi), inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+
+/* The suspect speaks in the pixel font — it is the voice of the game. */
+.msg-suspect .bubble {
+  background: var(--panel-2);
+  font-family: var(--px);
+  font-size: 10px;
+  line-height: 2;
+  color: #efedde;
+}
+
+.msg-player .bubble {
+  background: #1b3550;
+  color: #cfe6f7;
+  box-shadow: inset 3px 3px 0 0 #3d6d99, inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+
+/* The little caret that trails typewritten dialogue. */
+.caret {
+  display: inline-block;
+  width: 7px;
+  height: 11px;
+  background: var(--accent);
+  vertical-align: -1px;
+  margin-left: 2px;
+  animation: flash 0.5s steps(1, end) infinite;
+}
+
+.msg-evidence { max-width: 100%; }
+
+.msg-evidence .bubble {
+  background: #2a2410;
+  color: #ddd6b4;
+  font-size: 11.5px;
+  line-height: 1.7;
+  width: 100%;
+  box-shadow: inset 3px 3px 0 0 var(--accent-lo), inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+.msg-evidence b { font-family: var(--px); font-size: 9px; color: var(--accent); line-height: 2.1; }
+.msg-evidence code { font-family: var(--body); color: var(--accent); }
+
+.avatar {
+  flex: none;
+  width: 30px;
+  height: 30px;
+  display: grid;
+  place-items: center;
+  background: var(--line);
+  font-family: var(--px);
+  font-size: 8px;
+  color: var(--ink);
+  box-shadow: inset 2px 2px 0 0 var(--hi), inset -2px -2px 0 0 var(--lo), 0 0 0 2px #000;
+}
+
+.typing .bubble { display: flex; gap: 5px; align-items: center; padding: 14px 13px; }
+.typing .wait {
+  font-family: var(--px);
+  font-size: 8px;
+  color: var(--ink-dim);
+  margin-left: 5px;
+  white-space: nowrap;
+}
+.typing i {
+  width: 6px;
+  height: 6px;
+  background: var(--accent);
+  animation: hop 0.9s steps(2, end) infinite;
+}
+.typing i:nth-child(2) { animation-delay: 0.15s; }
+.typing i:nth-child(3) { animation-delay: 0.3s; }
+@keyframes hop { 0%, 100% { transform: translateY(0); opacity: 0.35; } 50% { transform: translateY(-4px); opacity: 1; } }
+
+.chat-input {
+  flex: none;
+  display: flex;
+  gap: 8px;
+  padding: 12px;
+  background: var(--panel-2);
+  border-top: 3px solid #000;
+}
+
+.chat-input input {
+  flex: 1;
+  min-width: 0;
+  padding: 11px;
+  border: none;
+  background: var(--sunk);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 12.5px;
+  outline: none;
+  box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px #000;
+}
+.chat-input input:focus { box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px var(--accent); }
+.chat-input input::placeholder { color: var(--ink-faint); }
+.chat-input input:disabled { opacity: 0.5; }
+
+/* -------------------------------- evidence ------------------------------- */
+
+.ev {
+  background: var(--panel-2);
+  padding: 12px;
+  margin-bottom: 14px;
+  box-shadow: inset 3px 3px 0 0 var(--hi), inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+.ev.used { opacity: 0.45; }
+.ev.new { animation: arrive 0.4s steps(2, end) 3; }
+@keyframes arrive { 0% { filter: brightness(2.2); } 100% { filter: none; } }
+
+.ev-head { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.ev-icon {
+  font-size: 13px;
+  flex: none;
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  background: var(--sunk);
+  box-shadow: inset 2px 2px 0 0 var(--lo), inset -2px -2px 0 0 var(--line), 0 0 0 2px #000;
+}
+
+.ev-head h3 {
+  margin: 0;
+  font-family: var(--px);
+  font-size: 9px;
+  line-height: 1.5;
+  font-weight: normal;
+  color: var(--ink);
+}
+
+.ev-summary { margin: 0 0 6px; font-size: 11.5px; color: var(--accent); line-height: 1.55; }
+.ev-detail { margin: 0 0 11px; font-size: 11.5px; color: var(--ink-dim); line-height: 1.6; }
+
+.btn-present { width: 100%; font-size: 8px; padding: 9px 6px; }
+
+.ev-locked {
+  font-size: 11.5px;
+  color: var(--ink-faint);
+  line-height: 1.6;
+  padding: 12px;
+  text-align: center;
+  background: var(--sunk);
+  box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px #000;
+}
+
+/* --------------------------------- modals -------------------------------- */
+
+.modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(6, 7, 14, 0.85);
+  display: grid;
+  place-items: center;
+  z-index: 500;
+  padding: 20px;
+  overflow: auto;
+}
+.modal.hidden { display: none; }
+
+.modal-card {
+  background: var(--panel);
+  padding: 24px;
+  max-width: 520px;
+  width: 100%;
+  box-shadow: inset 3px 3px 0 0 var(--hi), inset -3px -3px 0 0 var(--lo), 0 0 0 3px #000;
+}
+
+.modal-card h2 {
+  margin: 0 0 14px;
+  font-family: var(--px);
+  font-size: 15px;
+  line-height: 1.5;
+  font-weight: normal;
+  color: var(--accent);
+  text-shadow: 3px 3px 0 #000;
+}
+
+.modal-card p { margin: 0 0 16px; line-height: 1.7; color: #c6c8dd; font-size: 12px; }
+
+/* The grade stamp on the results screen. */
+.rank {
+  font-family: var(--px);
+  font-size: 34px;
+  text-align: center;
+  padding: 14px;
+  margin-bottom: 16px;
+  color: var(--accent);
+  background: var(--sunk);
+  text-shadow: 4px 4px 0 #000;
+  box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px #000;
+}
+.rank small {
+  display: block;
+  font-size: 8px;
+  letter-spacing: 2px;
+  color: var(--ink-faint);
+  margin-top: 12px;
+  text-shadow: none;
+}
+
+.accuse-choices { display: flex; gap: 10px; margin-bottom: 12px; }
+.accuse-choices .btn { flex: 1; padding: 13px; font-size: 10px; }
+
+.modal-close { width: 100%; }
+
+.solution {
+  background: var(--sunk);
+  padding: 13px;
+  margin-bottom: 18px;
+  box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px #000;
+}
+.solution h3 {
+  margin: 0 0 9px;
+  font-family: var(--px);
+  font-size: 8px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--danger);
+  font-weight: normal;
+}
+.solution p { margin: 0; font-size: 11.5px; line-height: 1.7; }
+
+.hint { font-family: var(--px); font-size: 8px; line-height: 2; color: var(--ink-faint); }
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+  font-family: var(--px);
+  font-size: 8px;
+  color: var(--ink-dim);
+}
+.field input {
+  display: block;
+  width: 100%;
+  margin-top: 8px;
+  padding: 10px;
+  border: none;
+  background: var(--sunk);
+  color: var(--ink);
+  font-family: var(--body);
+  font-size: 12px;
+  outline: none;
+  box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px #000;
+}
+.field input:focus { box-shadow: inset 3px 3px 0 0 var(--lo), inset -3px -3px 0 0 var(--line), 0 0 0 3px var(--accent); }
+
+.settings-actions { display: flex; align-items: center; gap: 11px; margin-bottom: 18px; flex-wrap: wrap; }
+#cfgSave { width: 100%; margin-bottom: 8px; }
+
+/* ------------------------------- responsive ------------------------------ */
+
+@media (max-width: 1120px) {
+  body { overflow: auto; height: auto; }
+  #board { grid-template-columns: 1fr; }
+  .panel { max-height: 70vh; }
+  #chat { min-height: 70vh; }
+  .title-logo { font-size: 26px; }
+}
+
+@media (max-width: 620px) {
+  #topbar { flex-wrap: wrap; gap: 12px; }
+  .meter { margin-left: 0; order: 3; width: 100%; }
+  .meter-track { flex: 1; }
+  .cell { flex: 1; width: auto; }
+  .title-logo { font-size: 19px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after { animation: none !important; }
+  #board.shake { animation: none !important; }
+}

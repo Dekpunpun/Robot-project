@@ -1,0 +1,57 @@
+# Builds a real Windows .exe (and a macOS .app) on GitHub's machines.
+#
+# Use this if you do not own a Windows PC. Push this project to a GitHub repo;
+# every push builds both, and the finished programs appear under the run's
+# "Artifacts" section, ready to download.
+name: build
+
+on:
+  push:
+  workflow_dispatch: # adds a "Run workflow" button on the Actions tab
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: VesperManifest-windows
+            path: dist/VesperManifest
+            check: dist/VesperManifest/VesperManifest.exe
+          - os: macos-latest
+            artifact: VesperManifest-macos
+            path: dist/The Vesper Manifest.app
+            check: dist/The Vesper Manifest.app/Contents/MacOS/VesperManifest
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Generate icon
+        run: python rpg/make_icon.py
+
+      - name: Build
+        run: python -m PyInstaller --noconfirm --clean VesperManifest.spec
+
+      # Renders a frame and asserts the pixel font was packaged. Without this a
+      # broken build still "succeeds" and only looks wrong once you run it.
+      - name: Verify the build runs
+        env:
+          SDL_VIDEODRIVER: dummy
+          SDL_AUDIODRIVER: dummy
+        run: "\"${{ matrix.check }}\" --selftest"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: ${{ matrix.path }}

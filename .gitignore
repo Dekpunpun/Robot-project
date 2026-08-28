@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+
+# PyInstaller output — rebuilt by build.sh/build.bat/CI, not checked in.
+build/
+dist/
+
+# Generated at build time by rpg/make_icon.py
+rpg/icon.icns
+rpg/icon.ico
