@@ -248,7 +248,9 @@ class World:
 
         put("munitions_crate", 12, 10, solid=True)
         put("munitions_crate", 14, 4, solid=True)
-        rack = put("weapon_rack", 9, 4, solid=True)
+        # Kept clear of the camera console at (8,5): two lookable props whose
+        # rects overlap and the nearer one silently swallows the other.
+        rack = put("weapon_rack", 11, 4, solid=True)
         self._look(rack, "The arms rack",
                    "Serial-stencilled slots, every one of them signed for. Two stand "
                    "empty tonight, and the dust in them is a different age.")
