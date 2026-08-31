@@ -15,6 +15,7 @@ import traceback
 import pygame
 
 import art
+import clock as clockmod
 import llm
 import sfx
 import ui
@@ -143,6 +144,7 @@ class Game:
     # -- run state -----------------------------------------------------------
 
     def reset_run(self):
+        self.clock = clockmod.Clock()
         self.found = []  # evidence ids picked up in the world (or unlocked by dialogue)
         self.convo = {
             sid: {
@@ -154,6 +156,8 @@ class Game:
                 "log": [],             # (speaker, text) - first-time-talking marker
                 "concepts": set(),     # Bricker only: which of the 3 ideas have landed
                 "asked_directly": False,  # Doss/Ashworth only: was the right question ever asked
+                "warned": set(),       # schedule warning thresholds already delivered
+                "departed": False,     # left the map per their schedule, if they have one
             }
             for sid in SUSPECTS_BY_ID
         }
@@ -255,9 +259,13 @@ class Game:
         if self.weather_next is None:
             self.weather_timer -= dt
             if self.weather_timer <= 0:
-                self.weather_next = random.choice(
-                    [w for w in ("clear", "rain", "fog") if w != self.weather]
-                )
+                # Late-night phases lean the roll toward rain/fog — never a
+                # guarantee, just a thumb on the scale, so a clear midnight
+                # still happens sometimes.
+                options = [w for w in ("clear", "rain", "fog") if w != self.weather]
+                bias = self.clock.phase["weather_bias"]
+                weights = [max(0.15, 1.0 - bias) if w == "clear" else 1.0 + bias for w in options]
+                self.weather_next = random.choices(options, weights=weights)[0]
             elif self.weather_fade < 1.0:
                 self.weather_fade = min(1.0, self.weather_fade + dt / self.WEATHER_FADE)
             return
@@ -303,6 +311,7 @@ class Game:
 
     def start_transition(self, zone_id):
         self.transition = {"zone": zone_id, "phase": "out", "t": 0.0}
+        self.clock.advance(clockmod.COST_ENTER_BUILDING)
         sfx.play("open")
 
     def _update_transition(self, dt):
@@ -353,6 +362,7 @@ class Game:
             self.begin_interview(target["suspect_id"])
             return
 
+        self.clock.advance(clockmod.COST_EXAMINE)
         eid = target.get("evidence")
         if eid and eid not in self.found:
             ev = EVIDENCE_BY_ID[eid]
@@ -392,8 +402,57 @@ class Game:
         self.active_suspect = sid
         self.talk_mode = "read"
         c = self.convo[sid]
+        lines = []
         if not c["log"]:
-            self.say_suspect(sid, SUSPECTS_BY_ID[sid]["opener"])
+            lines.append(SUSPECTS_BY_ID[sid]["opener"])
+        warning = self._due_warning(sid)
+        if warning:
+            lines.append(warning)
+        if lines:
+            self.say_suspect(sid, " ".join(lines))
+
+    def _due_warning(self, sid):
+        """The most urgent not-yet-delivered countdown line for a suspect on
+        a schedule, or None. Phrased as a countdown rather than a time, so it
+        stays useful to a player with no clock on screen. Marks every
+        threshold up to and including the one returned as delivered, so a
+        player who skips a visit never gets a stale earlier warning."""
+        sched = SUSPECTS_BY_ID[sid].get("schedule")
+        if not sched:
+            return None
+        c = self.convo[sid]
+        warned = c.setdefault("warned", set())
+        due = [(t, text) for t, text in sched["warnings"] if self.clock.minutes >= t and t not in warned]
+        if not due:
+            return None
+        due.sort()
+        for t, _ in due:
+            warned.add(t)
+        return due[-1][1]
+
+    def _update_departures(self):
+        """Suspects on a schedule leave the map once their time comes, with
+        an empty, examinable post left behind as the only explanation. Only
+        checked while PLAYING (never mid-conversation) so a suspect can't be
+        pulled out from under an interview in progress."""
+        for sid, sched in ((s["id"], s.get("schedule")) for s in CASE["suspects"]):
+            if not sched or self.convo[sid].get("departed"):
+                continue
+            if self.clock.minutes < sched["leaves_at"]:
+                continue
+            self.convo[sid]["departed"] = True
+            spot = self.world.npc_spots[sid]
+            self.npcs.pop(sid, None)
+            if spot["blocker"] in self.world.blockers:
+                self.world.blockers.remove(spot["blocker"])
+            for it in self.world.interactables:
+                if it.get("suspect_id") == sid:
+                    it["npc"] = False
+                    it["suspect_id"] = None
+                    it["body"] = sched["vacated"]
+                    it["evidence"] = None
+                    break
+            self.toast.show(f"{SUSPECTS_BY_ID[sid]['name'].upper()} HAS LEFT")
 
     def say_suspect(self, sid, line):
         self.convo[sid]["log"].append(("suspect", line))
@@ -403,9 +462,10 @@ class Game:
         sid = self.active_suspect
         c = self.convo[sid]
         c["turns"] += 1
+        self.clock.advance(clockmod.COST_PRESENT if evidence else clockmod.COST_QUESTION)
         c["history"].append({"role": "user", "content": user_text})
         c["log"].append(("you", user_text))
-        messages = [{"role": "system", "content": llm.system_prompt(sid, c)}]
+        messages = [{"role": "system", "content": llm.system_prompt(sid, c, self.clock.phase)}]
         messages += c["history"]
         self.ai.ask(messages)
         self.waiting_since = pygame.time.get_ticks()
@@ -449,7 +509,11 @@ class Game:
         npc = self.npcs[sid]
 
         before = c["pressure"]
-        c["pressure"] = max(0.0, min(100.0, c["pressure"] + delta))
+        # Late-night damping only slows what talk alone can earn - it never
+        # touches the floor below, so a player who did the legwork is never
+        # blocked by the hour, only one trying to talk their way there late.
+        damped_delta = delta * self.clock.phase["damp"] if delta > 0 else delta
+        c["pressure"] = max(0.0, min(100.0, c["pressure"] + damped_delta))
         # Hard evidence guarantees progress even if the model undersells it.
         floor = min(95.0, float(sum(EVIDENCE_BY_ID[e]["pressure"] for e in c["presented"])))
         c["pressure"] = max(c["pressure"], floor)
@@ -514,6 +578,7 @@ class Game:
             "grade": grade,
             "caption": caption or ending_def["caption"],
             "prose": ending_def["prose"],
+            "closed_at": self.clock.hhmm,
         }
         self.state = ENDING
         sfx.play("win" if shape == "correct_strong" else "lose")
@@ -701,6 +766,10 @@ class Game:
 
         if self.state in (PLAYING, TALKING):
             self._update_weather(dt)
+            self.clock.tick(dt)
+
+        if self.state == PLAYING:
+            self._update_departures()
 
         if self.transition:
             self._update_transition(dt)
@@ -812,10 +881,17 @@ class Game:
             if self.world.zone_at(npc.x, npc.y) is None and _under_roof(npc.x, npc.y):
                 npc.draw(s, cam, self.tick)
 
-        # Night, punched through by every lamp in range.
+        # Night, punched through by every lamp in range. How dark it gets,
+        # and how many lamps still work, both come from the clock's phase —
+        # the only way the player ever reads the hour is by feel.
+        night = self.clock.phase
         dark = pygame.Surface((SCREEN_W, SCREEN_H), pygame.SRCALPHA)
-        dark.fill((10, 12, 30, 132))
+        dark.fill((*night["tint"], night["dark_alpha"]))
         for lx, ly, r in self.world.lights:
+            # A lamp's survival is hashed from its position, not rolled per
+            # frame, so a dead lamp stays dead instead of strobing.
+            if (int(lx) * 92821 + int(ly) * 68917) % 100 >= night["lamp_frac"] * 100:
+                continue
             # A lamp under a roof you are not standing under stays hidden,
             # otherwise its pool glows through the shingles.
             lz = self.world.zone_at(lx, ly)
@@ -1059,7 +1135,10 @@ class Game:
         y += 28
 
         turns = sum(c["turns"] for c in self.convo.values())
-        stat = f"{turns} QUESTIONS   {len(self.found)}/{len(CASE['evidence'])} FOUND"
+        stat = (
+            f"{turns} QUESTIONS   {len(self.found)}/{len(CASE['evidence'])} FOUND   "
+            f"CASE CLOSED {e['closed_at']}"
+        )
         ui.text(s, stat, 14, y, UI_DIM)
         y += 16
 

@@ -242,10 +242,35 @@ def _stance(s, state):
     return stance, control_help
 
 
-def system_prompt(suspect_id, state):
+NIGHT_FLAVOR = {
+    "evening": "It is early in the evening. Nothing about the hour presses on anyone yet.",
+    "night": "Night has properly set in - late enough that anyone reasonable would rather be "
+             "somewhere warm by now.",
+    "late": "It is late - the kind of late where an ordinary day is long over and everyone "
+            "still awake is awake for a reason.",
+    "small_hrs": "It is deep in the small hours, the dead middle of the night. Whatever the "
+                 "detective is racing toward is close now, if it isn't already too late.",
+}
+
+THORNE_LATE_LINE = (
+    " Your own deadline is bearing down as the night wears on, which makes you more "
+    "desperate and more clipped, not calmer - you feel time bleeding away even while you "
+    "deflect."
+)
+
+
+def system_prompt(suspect_id, state, night):
     s = SUSPECTS_BY_ID[suspect_id]
     stance, control_help = _stance(s, state)
     facts = "\n".join(f"- {f}" for f in CASE["facts"])
+    hour_line = NIGHT_FLAVOR.get(night["name"], "")
+    if suspect_id == "thorne" and night["name"] in ("late", "small_hrs"):
+        hour_line += THORNE_LATE_LINE
+    if state.get("warned"):
+        hour_line += (
+            " You already told the detective you're on limited time here, and you feel that "
+            "clock pressing on you now more than anything else in the room."
+        )
     leave_line = (
         "You are standing in the street and can end this conversation any time you like - "
         "nobody is making you stay."
@@ -268,6 +293,8 @@ WHAT YOU ARE REALLY PROTECTING: {s['motive']}
 
 CASE FACTS - these are established and you cannot contradict them:
 {facts}
+
+THE HOUR: {hour_line} You may let this colour your tone and patience, and may reference how late it's gotten in your own words, but you do not know an exact time and must never state one.
 
 {stance}
 

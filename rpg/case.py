@@ -119,6 +119,17 @@ CASE = {
                 "evidence": "vault-ledger",
                 "angle": "asking him plainly, directly, what the ledger pattern actually means",
             },
+            "schedule": {
+                "leaves_at": 150,
+                "warnings": [
+                    (90, "I'm off shift in about an hour, for what it's worth."),
+                    (130, "Twenty minutes and I'm off the clock. Whatever you need, ask it now."),
+                ],
+                "vacated": (
+                    "Doss's post at the vault terminal sits empty, his log signed out at 22:30. "
+                    "Whatever he understood about that ledger, he took it home with him."
+                ),
+            },
         },
         {
             "id": "ashworth",
@@ -151,6 +162,17 @@ CASE = {
                 "type": "evidence_plus_question",
                 "evidence": "vault-ledger",
                 "angle": "showing her the log and asking specifically why she never filed the welfare-check flag on Thorne",
+            },
+            "schedule": {
+                "leaves_at": 210,
+                "warnings": [
+                    (150, "I have a car waiting within the hour. Say what you came to say."),
+                    (190, "Twenty minutes, detective. Then I'm back on-post whether we're finished or not."),
+                ],
+                "vacated": (
+                    "The command office's lamp is off and the wall map is dark. Ashworth signed "
+                    "out at 23:30 - whatever she was sitting on, she took the decision with her."
+                ),
             },
         },
         {
@@ -189,6 +211,17 @@ CASE = {
                     "compact": ["cinder compact"],
                     "leverage": ["mira", "his wife", "her life", "hostage", "ransom"],
                 },
+            },
+            "schedule": {
+                "leaves_at": 180,
+                "warnings": [
+                    (120, "I'm not standing out here all night, you know."),
+                    (160, "I'm going inside in twenty minutes whether you're done or not."),
+                ],
+                "vacated": (
+                    "Bricker's gone in for the night, the motor pool bay shut at 23:00. Whatever "
+                    "he was holding back, he's holding it behind a closed door now."
+                ),
             },
         },
     ],
