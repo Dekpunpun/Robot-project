@@ -1221,17 +1221,40 @@ class Game:
 
         if self.talk_mode == "evidence":
             items = self.available_evidence()
-            h = 22 + len(items) * 12
-            ui.panel(s, (12, SCREEN_H - h - 8, SCREEN_W - 24, h))
-            ui.text(s, "PRESENT WHAT?", 20, SCREEN_H - h + 0, ACCENT)
-            for i, ev in enumerate(items):
-                y = SCREEN_H - h + 16 + i * 12
-                sel = i == self.ev_index
+            # Capped rather than growing with the exhibit count (a case with
+            # more items would otherwise push this panel up through the
+            # portrait), and scrolled to keep the selection in view. The
+            # panel is bottom-anchored (ui.panel's y is SCREEN_H - h - 8), so
+            # a fixed block reserved below the list - for the "contradicts"
+            # preview - sits at the same absolute position regardless of how
+            # many rows are visible; only the top edge moves.
+            MAX_VISIBLE = 4
+            PREVIEW_BLOCK = 40
+            start = 0
+            if len(items) > MAX_VISIBLE:
+                start = max(0, min(self.ev_index - MAX_VISIBLE // 2, len(items) - MAX_VISIBLE))
+            visible = items[start:start + MAX_VISIBLE]
+            list_h = len(visible) * 12
+            h = 22 + list_h + PREVIEW_BLOCK
+            top = SCREEN_H - h - 8
+            ui.panel(s, (12, top, SCREEN_W - 24, h))
+            ui.text(s, "PRESENT WHAT?", 20, top + 8, ACCENT)
+            for i, ev in enumerate(visible):
+                real_i = start + i
+                y = top + 24 + i * 12
+                sel = real_i == self.ev_index
                 done = ev["id"] in c["presented"]
                 if sel:
                     pygame.draw.rect(s, UI_BG_2, (16, y - 2, SCREEN_W - 32, 12))
                     ui.text(s, ">", 18, y, ACCENT)
                 ui.text(s, ev["name"][:34], 28, y, UI_FAINT if done else (UI_TEXT if sel else UI_DIM))
+            # The thing a player actually needs mid-argument - previously
+            # visible only in the case file, which meant leaving the
+            # interrogation entirely to go re-read what an exhibit contradicts.
+            py = top + 24 + list_h + 4
+            for line in ui.wrap(items[self.ev_index]["contradicts"], SCREEN_W - 40)[:2]:
+                ui.text(s, line, 20, py, ACCENT)
+                py += 10
             ui.text(s, "ENTER PRESENT   TAB BACK", 20, SCREEN_H - 14, UI_FAINT)
             return
 
@@ -1278,6 +1301,13 @@ class Game:
         ):
             ui.text(s, line, 18, y, UI_DIM)
             y += 11
+        # Committing here is irreversible with nothing else on screen to
+        # decide from - a bare minimum of the state that actually matters.
+        y += 6
+        shown = len(self.convo[self.accuse_confirm]["presented"])
+        ui.text(s, f"EXHIBITS FOUND: {len(self.found)}/{len(CASE['evidence'])}", 18, y, UI_FAINT)
+        y += 11
+        ui.text(s, f"SHOWN TO {accused['name'].upper()}: {shown}", 18, y, UI_FAINT)
 
     def draw_paused(self):
         s = self.scene
@@ -1313,6 +1343,20 @@ class Game:
                 ui.text(s, ">", 16, y + 1, ACCENT)
             ui.text(s, label, 26, y + 1, UI_TEXT if sel else UI_DIM)
             y += 22
+
+    def _draw_wrapped(self, lines, x, y, colour=UI_TEXT):
+        """Draw wrapped lines one per row, clamped to whatever space remains
+        above the footer rule. draw_ending already did this by hand for the
+        one place a long case-authored string was known to risk overflow;
+        case.py is the file the README advertises as swappable for a new
+        case, so every wrap loop reading from it gets the same guarantee -
+        a longer fact or exhibit silently loses its tail instead of
+        spilling text through the footer chrome."""
+        room = max(0, (SCREEN_H - 26 - y) // 10)
+        for line in lines[:room]:
+            ui.text(self.scene, line, x, y, colour)
+            y += 10
+        return y
 
     def _section(self, label, y):
         """An amber section header with a rule running out to the margin."""
@@ -1378,28 +1422,24 @@ class Game:
         if page == 0:
             ui.terminal_frame(s, "HRPD // BRIEFING", self.tick, footer)
             y = self._section("00:12 - THE CALL", 28)
-            for line in ui.wrap(CASE["meta"]["opening"], SCREEN_W - 40):
-                ui.text(s, line, 18, y)
-                y += 10
+            self._draw_wrapped(ui.wrap(CASE["meta"]["opening"], SCREEN_W - 40), 18, y)
             return
 
         if page == 1:
             ui.terminal_frame(s, "HRPD // THE SCENE", self.tick, footer)
             y = self._section("SCENE", 28)
-            for line in ui.wrap(CASE["scene"], SCREEN_W - 40):
-                ui.text(s, line, 18, y)
-                y += 10
+            self._draw_wrapped(ui.wrap(CASE["scene"], SCREEN_W - 40), 18, y)
             return
 
         if page == 2:
             ui.terminal_frame(s, "HRPD // TIMELINE", self.tick, footer)
             y = self._section("TIMELINE", 28)
             for when, what in CASE["timeline"]:
+                if y > SCREEN_H - 30:
+                    break
                 ui.text(s, when, 18, y, ACCENT)
                 y += 10
-                for line in ui.wrap(what, SCREEN_W - 44):
-                    ui.text(s, line, 24, y, UI_DIM)
-                    y += 10
+                y = self._draw_wrapped(ui.wrap(what, SCREEN_W - 44), 24, y, UI_DIM)
                 y += 3
             return
 
@@ -1407,19 +1447,21 @@ class Game:
             ui.terminal_frame(s, "HRPD // ESTABLISHED FACTS", self.tick, footer)
             y = self._section("WHAT'S KNOWN - CAN'T BE CONTRADICTED", 28)
             for fact in CASE["facts"]:
-                for line in ui.wrap(f"- {fact}", SCREEN_W - 40):
-                    ui.text(s, line, 18, y)
-                    y += 10
+                if y > SCREEN_H - 30:
+                    break
+                y = self._draw_wrapped(ui.wrap(f"- {fact}", SCREEN_W - 40), 18, y)
             return
 
         if page == 4:
             ui.terminal_frame(s, "HRPD // CASE FILE 44-C", self.tick, footer)
             y = self._section("VICTIM", 28)
-            for line in ui.wrap(f"{CASE['victim']['name']}. {CASE['victim']['detail']}", SCREEN_W - 40):
-                ui.text(s, line, 18, y)
-                y += 10
+            y = self._draw_wrapped(
+                ui.wrap(f"{CASE['victim']['name']}. {CASE['victim']['detail']}", SCREEN_W - 40), 18, y
+            )
             y = self._section("SUSPECTS", y + 6)
             for sp in CASE["suspects"]:
+                if y > SCREEN_H - 30:
+                    break
                 ui.text(s, sp["name"], 18, y, UI_TEXT)
                 y += 10
                 ui.text(s, ui.wrap(sp["role"], SCREEN_W - 34)[0], 18, y, UI_FAINT)
@@ -1432,14 +1474,9 @@ class Game:
             ev = EVIDENCE_BY_ID[self.found[page - self.CASEFILE_INTRO_PAGES]]
             ui.terminal_frame(s, f"HRPD // EXHIBIT {exhibit_num}", self.tick, footer)
             ui.text(s, ev["name"].upper()[:36], 14, 28, UI_TEXT)
-            y = 44
-            for line in ui.wrap(ev["detail"], SCREEN_W - 40):
-                ui.text(s, line, 18, y)
-                y += 10
+            y = self._draw_wrapped(ui.wrap(ev["detail"], SCREEN_W - 40), 18, 44)
             y = self._section("CONTRADICTS", y + 6)
-            for line in ui.wrap(ev["contradicts"], SCREEN_W - 40):
-                ui.text(s, line, 18, y, ACCENT)
-                y += 10
+            self._draw_wrapped(ui.wrap(ev["contradicts"], SCREEN_W - 40), 18, y, ACCENT)
             if any(ev["id"] in c["presented"] for c in self.convo.values()):
                 ui.text(s, "[ PRESENTED ]", 14, SCREEN_H - 34, GREEN)
             return
@@ -1670,6 +1707,46 @@ class Game:
             self.draw()
 
 
+def _selftest_parse_tell():
+    """Edge cases that have each broken this once: case-sensitive field
+    names losing an uppercasing model's composure, and an unterminated
+    control block leaking raw [[TELL syntax onto the player's screen."""
+    problems = []
+    cases = [
+        ("Hello there.", ("Hello there.", None, 0, False, [])),
+        ("[[TELL composure=rattled pressure=+12]]", ("", "rattled", 12, False, [])),
+        ("Fine. [[tell COMPOSURE=Cracking pressure=30 ASKED=yes]]", ("Fine.", "cracking", 30, True, [])),
+        ("Look, [[TELL composure=steady pressure=+5", ("Look,", None, 0, False, [])),
+    ]
+    for raw, expected in cases:
+        got = llm.parse_tell(raw)
+        if got != expected:
+            problems.append(f"parse_tell({raw!r}) = {got!r}, expected {expected!r}")
+    return problems
+
+
+def _selftest_winnable():
+    """The strong ending must stay reachable from world evidence alone, even
+    if the model never contributes a pressure delta - receive()'s pressure
+    floor is the deliberate backstop for that. Encodes the same arithmetic
+    the case-content audit checked by hand, so a future edit to evidence
+    pressures or conviction thresholds can't silently take that away."""
+    problems = []
+    conv = CASE["conviction"]
+    strong = conv["strong"]
+    pool_by_pressure = sorted((EVIDENCE_BY_ID[e]["pressure"] for e in strong["pool"]), reverse=True)
+    best_floor = sum(pool_by_pressure[: strong["requires_count"]])
+    if best_floor < strong["minPressure"]:
+        problems.append(
+            f"even the {strong['requires_count']} highest-pressure pool items only floor to "
+            f"{best_floor}, short of minPressure {strong['minPressure']} - the strong ending "
+            "would be unreachable without the model contributing a delta"
+        )
+    if conv["culprit"] not in SUSPECTS_BY_ID:
+        problems.append(f"conviction culprit {conv['culprit']!r} is not a real suspect id")
+    return problems
+
+
 def selftest():
     """Prove a packaged build works: boot, render, and check the font loaded.
 
@@ -1698,6 +1775,8 @@ def selftest():
         problems.append(f"expected {len(CASE['suspects'])} suspects, found {len(g.npcs)}")
     if not sfx.ok:
         problems.append("audio device unavailable (harmless under a dummy driver)")
+    llm_problems = _selftest_parse_tell() + _selftest_winnable()
+    problems += llm_problems
     out = sys.argv[sys.argv.index("--selftest") + 1] if len(sys.argv) > 2 else None
     if out:
         pygame.image.save(g.screen, out)
@@ -1705,7 +1784,8 @@ def selftest():
     print(f"props={len(g.world.objects)} npcs={len(g.npcs)} font={ui.pixel_font_loaded} audio={sfx.ok}")
     for p in problems:
         print("PROBLEM:", p)
-    return 1 if any("font" in p or "empty" in p or "suspects" in p for p in problems) else 0
+    fail = any("font" in p or "empty" in p or "suspects" in p for p in problems) or llm_problems
+    return 1 if fail else 0
 
 
 if __name__ == "__main__":
