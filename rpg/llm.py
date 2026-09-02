@@ -54,6 +54,20 @@ MAX_SPOKEN_SENTENCES = 4
 MAX_SPOKEN_CHARS = 320
 
 
+def _dedupe_repeats(sentences):
+    """Collapse "Yes I do. Yes I do. Yes I do." down to one - a degenerate
+    repetition loop a weak or unlucky local model can fall into regardless
+    of sampling settings. Only consecutive repeats collapse, so a phrase the
+    character genuinely says twice at different points in a longer answer is
+    left alone."""
+    out = []
+    for sent in sentences:
+        if out and sent.strip().lower() == out[-1].strip().lower():
+            continue
+        out.append(sent)
+    return out
+
+
 def _post(path, payload):
     req = urllib.request.Request(
         BASE_URL + path,
@@ -139,6 +153,13 @@ class Client:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": False,
+                # Nudges a local model away from the degenerate "yes I do.
+                # yes I do. yes I do." loop a repetition-blind sampler can
+                # fall into - standard OpenAI-compatible fields, honoured
+                # by llama.cpp's server too. _dedupe_repeats below is the
+                # backstop for whatever gets through anyway.
+                "frequency_penalty": 0.4,
+                "presence_penalty": 0.4,
                 # Qwen3's server-side switch for its default thinking mode.
                 # Silently ignored by any backend/model that doesn't
                 # recognise it, so this is safe to send unconditionally.
@@ -239,7 +260,8 @@ def parse_tell(raw):
         # if it were dialogue.
         spoken = re.split(r"\[\[TELL", raw, maxsplit=1, flags=re.I)[0].strip()
     spoken = re.sub(r"\s{2,}", " ", spoken)
-    sentences = SENTENCE_SPLIT.split(spoken)
+    sentences = _dedupe_repeats(SENTENCE_SPLIT.split(spoken))
+    spoken = " ".join(sentences)
     if len(sentences) > MAX_SPOKEN_SENTENCES:
         spoken = " ".join(sentences[:MAX_SPOKEN_SENTENCES])
     if len(spoken) > MAX_SPOKEN_CHARS:
