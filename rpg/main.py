@@ -24,7 +24,7 @@ from entities import NPC, Player
 from settings import *
 from world import MAP_H, MAP_W, World
 
-TITLE_SCREEN, PLAYING, CASEFILE, TALKING, ACCUSE, ENDING = range(6)
+TITLE_SCREEN, PLAYING, CASEFILE, TALKING, ACCUSE, ENDING, PAUSED = range(7)
 
 # Set LE_DEBUG=1 to have the game dump frames and a log of what it did.
 # There is no way to see the player's real screen from here, so when
@@ -170,6 +170,7 @@ class Game:
                 "asked_directly": False,  # Doss/Ashworth only: was the right question ever asked
                 "warned": set(),       # schedule warning thresholds already delivered
                 "departed": False,     # left the map per their schedule, if they have one
+                "last_typed": "",      # last real question the player typed (never a synthesized evidence string)
             }
             for sid in SUSPECTS_BY_ID
         }
@@ -178,11 +179,14 @@ class Game:
         self.typed = ""
         self.ev_index = 0
         self.waiting_since = None
+        self._pending_evidence_id = None
         self.ending = None
         self.casefile_page = 0
         self.accuse_index = 0
         self.accuse_confirm = None
         self.accuse_return = PLAYING
+        self.pause_index = 0
+        self.pause_showing_controls = False
         # A previous run may have repurposed a departed suspect's interactable
         # into their vacated-post text - put every one back to its talkable,
         # pristine state before the floor sync below decides who's live.
@@ -440,7 +444,8 @@ class Game:
             sfx.play("error")
             self.box.open(
                 "They look at you and say nothing. " + self.ai.error +
-                " Start LM Studio, load a chat model, and try again.",
+                " Start LM Studio and load a chat model - the game keeps trying to "
+                "reconnect on its own, so just try again once it's up.",
                 "No connection",
             )
             return
@@ -544,15 +549,31 @@ class Game:
         self.convo[sid]["log"].append(("suspect", line))
         self.box.open(line, SUSPECTS_BY_ID[sid]["name"])
 
+    # How much of the conversation is actually sent to the model each turn.
+    # c["history"] itself is kept in full (the transcript view reads all of
+    # it) - this only bounds what gets re-sent alongside the ~1000-token
+    # system prompt, so a long interview doesn't grow the request forever.
+    HISTORY_WINDOW = 16
+
     def send(self, user_text, evidence=None):
         sid = self.active_suspect
         c = self.convo[sid]
         c["turns"] += 1
+        # Tracked so a turn that never gets an answer (error, or the player
+        # cancels) can be unwound exactly - see _rollback_pending_turn.
+        self._pending_evidence_id = evidence["id"] if evidence else None
+        if evidence is None:
+            # What the keyword backstops in `receive` scan. On an evidence
+            # turn `user_text` below is a synthesized [EVIDENCE PRESENTED...]
+            # string, not anything the player wrote - last_typed is left
+            # untouched then, so a backstop always sees the last thing the
+            # player actually said, never manufactured text.
+            c["last_typed"] = user_text
         self.clock.advance(clockmod.COST_PRESENT if evidence else clockmod.COST_QUESTION)
         c["history"].append({"role": "user", "content": user_text})
         c["log"].append(("you", user_text))
         messages = [{"role": "system", "content": llm.system_prompt(sid, c, self.clock.phase)}]
-        messages += c["history"]
+        messages += c["history"][-self.HISTORY_WINDOW:]
         self.ai.ask(messages)
         self.waiting_since = pygame.time.get_ticks()
         self.talk_mode = "read"
@@ -575,19 +596,45 @@ class Game:
             evidence=ev,
         )
 
+    def _rollback_pending_turn(self, sid):
+        """Undo the bookkeeping `send()` did for a turn that will never get
+        an answer - the model errored, or the player cancelled it. Puts the
+        question, and any evidence presented with it, back exactly as if it
+        had never been asked, so the player can just try again."""
+        c = self.convo[sid]
+        c["history"].pop()
+        c["turns"] -= 1
+        if self._pending_evidence_id:
+            try:
+                c["presented"].remove(self._pending_evidence_id)
+            except ValueError:
+                pass
+        self._pending_evidence_id = None
+
     def receive(self, kind, payload):
         sid = self.active_suspect
         c = self.convo[sid]
         self.waiting_since = None
         if kind == "err":
             sfx.play("error")
-            c["history"].pop()  # the question never landed; let them retry it
-            c["turns"] -= 1
+            self._rollback_pending_turn(sid)
             c["log"].append(("system", payload))
             self.box.open(payload, "Connection")
             return
 
         spoken, composure, delta, asked, concepts = llm.parse_tell(payload)
+        if not spoken:
+            # The model produced only a control line (or nothing at all) -
+            # rendering that as an empty dialogue box left the player
+            # staring at a blank panel with no explanation. Unwind the turn
+            # exactly like a network error, rather than silently spending
+            # it and the assistant's empty reply on nothing.
+            sfx.play("error")
+            self._rollback_pending_turn(sid)
+            c["log"].append(("system", "The model gave a control line but no actual words."))
+            self.box.open("They start to answer, then... nothing comes out. Try asking again.", "Connection")
+            return
+        self._pending_evidence_id = None
         c["history"].append({"role": "assistant", "content": payload})
 
         s = SUSPECTS_BY_ID[sid]
@@ -614,7 +661,10 @@ class Game:
                 # the suspect forever no matter how plainly the player asks.
                 # A topic word plus a question word, anywhere in the text,
                 # rather than an exact phrase - real phrasing reorders freely.
-                user_text = (c["history"][-2]["content"] if len(c["history"]) >= 2 else "").lower()
+                # Scans only what the player actually typed - never the
+                # synthesized [EVIDENCE PRESENTED...] string a present() turn
+                # puts in history, which would otherwise grant this for free.
+                user_text = c["last_typed"].lower()
                 kw = brk["angle_keywords"]
                 if any(t in user_text for t in kw["topic"]) and any(a in user_text for a in kw["ask"]):
                     c["asked_directly"] = True
@@ -623,8 +673,12 @@ class Game:
             c["concepts"] |= set(concepts)
             # Deterministic backstop: also scan what the PLAYER just typed, so
             # a model that forgets to self-report a concept it clearly heard
-            # can't stall a deserving turn. Never scans the model's own reply.
-            user_text = (c["history"][-2]["content"] if len(c["history"]) >= 2 else "").lower()
+            # can't stall a deserving turn. Never the model's own reply, and
+            # never a synthesized [EVIDENCE PRESENTED...] string either - a
+            # present() turn must not silently hand him concepts he's
+            # written to resist just because an exhibit's name/summary
+            # happens to contain one of the backstop keywords.
+            user_text = c["last_typed"].lower()
             for concept, keywords in brk["keyword_backstop"].items():
                 if any(k in user_text for k in keywords):
                     c["concepts"].add(concept)
@@ -632,7 +686,10 @@ class Game:
             if complete and "bricker-account" not in self.found:
                 self.found.append("bricker-account")
                 self.toast.show("ADDED: BRICKER'S ACCOUNT")
-            npc.mood = "cracking" if complete else "steady"
+            have = len(c["concepts"] & set(brk["concepts"]))
+            npc.mood = c["composure"] = (
+                "cracking" if complete else "rattled" if have > 0 else "steady"
+            )
         else:
             if composure in ("steady", "rattled", "cracking"):
                 c["composure"] = composure
@@ -734,6 +791,10 @@ class Game:
             self.on_key_talking(e)
             return
 
+        if self.state == PAUSED:
+            self.on_key_paused(e)
+            return
+
         # -- walking around
         if self.transition:
             return
@@ -748,7 +809,7 @@ class Game:
             self.casefile_page = 0
             self.state = CASEFILE
         elif e.key == pygame.K_ESCAPE:
-            self.quit()
+            self.open_pause()
 
     def open_accuse(self, return_to):
         self.accuse_index = 0
@@ -778,6 +839,43 @@ class Game:
             self.resolve(self.accuse_confirm)
         elif e.key in (pygame.K_n, pygame.K_ESCAPE):
             self.accuse_confirm = None
+            sfx.play("close")
+
+    PAUSE_OPTIONS = ("RESUME", "CONTROLS", "QUIT")
+
+    def open_pause(self):
+        # Deliberately does NOT touch the clock - see the PAUSED note in
+        # update(). Pausing only stops input, never the night.
+        self.pause_index = 0
+        self.pause_showing_controls = False
+        self.state = PAUSED
+        sfx.play("open")
+
+    def on_key_paused(self, e):
+        if self.pause_showing_controls:
+            if e.key in (pygame.K_ESCAPE, pygame.K_TAB, pygame.K_RETURN, pygame.K_KP_ENTER):
+                self.pause_showing_controls = False
+                sfx.play("close")
+            return
+
+        if e.key in (pygame.K_DOWN, pygame.K_s):
+            self.pause_index = (self.pause_index + 1) % len(self.PAUSE_OPTIONS)
+            sfx.play("move")
+        elif e.key in (pygame.K_UP, pygame.K_w):
+            self.pause_index = (self.pause_index - 1) % len(self.PAUSE_OPTIONS)
+            sfx.play("move")
+        elif e.key in (pygame.K_RETURN, pygame.K_KP_ENTER):
+            choice = self.PAUSE_OPTIONS[self.pause_index]
+            if choice == "RESUME":
+                self.state = PLAYING
+                sfx.play("close")
+            elif choice == "CONTROLS":
+                self.pause_showing_controls = True
+                sfx.play("open")
+            else:  # QUIT
+                self.quit()
+        elif e.key == pygame.K_ESCAPE:
+            self.state = PLAYING
             sfx.play("close")
 
     def on_key_talking(self, e):
@@ -815,6 +913,12 @@ class Game:
         if self.box.active and self.box.advance():
             return
         if self.ai.busy:
+            if e.key == pygame.K_ESCAPE:
+                self.ai.cancel()
+                self._rollback_pending_turn(self.active_suspect)
+                self.waiting_since = None
+                self.toast.show("QUESTION CANCELLED")
+                sfx.play("close")
             return
         if e.key in (pygame.K_RETURN, pygame.K_KP_ENTER, pygame.K_e, pygame.K_SPACE):
             self.talk_mode = "input"
@@ -862,7 +966,16 @@ class Game:
         if result:
             self.receive(*result)
 
-        if self.state in (PLAYING, TALKING):
+        # Keep trying to reach the model in the background whenever it isn't
+        # reachable, so starting LM Studio after the game launches recovers
+        # on its own instead of requiring a restart. check() no-ops while a
+        # check is already in flight, so this is safe to call every ~4s.
+        if self.ai.status != "ok" and self.tick % (FPS * 4) == 0:
+            self.ai.check()
+
+        # PAUSED deliberately keeps ticking here - pausing must never be a
+        # way to buy free thinking time against the night clock.
+        if self.state in (PLAYING, TALKING, PAUSED):
             self._update_weather(dt)
             self.clock.tick(dt)
 
@@ -1056,12 +1169,23 @@ class Game:
         if c["composure"] == "cracking" and (self.tick // 16) % 2 == 0:
             col = UI_TEXT
 
-        # Header: name on the left, pressure read-out on the right. The name is
-        # clipped to whatever the meter leaves, so a long rank never runs under it.
+        # Header: name on the left, a progress read-out on the right. The
+        # name is clipped to whatever that leaves, so a long rank never runs
+        # under it. Bricker's own pressure is pinned at +0 by design (nothing
+        # moves him but understanding, see llm.py's conversational_trigger
+        # stance) - showing that percentage would just read as a broken
+        # meter, so he gets a concepts-held count instead.
         ui.panel(s, (6, 6, SCREEN_W - 12, 20), UI_BG, UI_LINE)
         ui.text(s, name[: (SCREEN_W - 162) // 8], 12, 10, UI_TEXT)
-        ui.meter(s, SCREEN_W - 128, 9, c["pressure"])
-        ui.text(s, f"{int(c['pressure']):3d}%", SCREEN_W - 40, 10, UI_DIM)
+        brk = suspect["break"]
+        if brk["type"] == "conversational_trigger":
+            total = len(brk["concepts"])
+            have = len(c["concepts"] & set(brk["concepts"]))
+            ui.meter(s, SCREEN_W - 128, 9, have / total * 100 if total else 0)
+            ui.text(s, f"{have}/{total}", SCREEN_W - 40, 10, UI_DIM)
+        else:
+            ui.meter(s, SCREEN_W - 128, 9, c["pressure"])
+            ui.text(s, f"{int(c['pressure']):3d}%", SCREEN_W - 40, 10, UI_DIM)
 
         # Portrait, reacting to composure. It borrows the world sprite's shake
         # so a landed piece of evidence hits the face as well as the body.
@@ -1139,6 +1263,41 @@ class Game:
             ui.text(s, line, 18, y, UI_DIM)
             y += 11
 
+    def draw_paused(self):
+        s = self.scene
+
+        if self.pause_showing_controls:
+            ui.terminal_frame(s, "HRPD // CONTROLS", self.tick, "ENTER / TAB / ESC   BACK")
+            y = self._section("HOW TO PLAY", 28)
+            lines = [
+                ("WASD / ARROWS", "MOVE"),
+                ("SHIFT", "RUN"),
+                ("E / SPACE / ENTER", "LOOK, TALK, ADVANCE TEXT"),
+                ("TAB", "CASE FILE   (PRESENT EVIDENCE, MID-TALK)"),
+                ("A", "ACCUSE"),
+                ("ESC", "BACK, CANCEL A QUESTION, OR PAUSE"),
+                ("F11", "FULLSCREEN"),
+                ("M", "SOUND"),
+            ]
+            for key, what in lines:
+                ui.text(s, key, 20, y, ACCENT)
+                ui.text(s, what, 110, y, UI_DIM)
+                y += 12
+            return
+
+        ui.terminal_frame(s, "HRPD // STAND BY", self.tick, "ENTER SELECT   ESC RESUME")
+        y = self._section("PAUSED", 28)
+        ui.text(s, "The night keeps moving. Nobody waits for you.", 14, y, UI_FAINT)
+        y += 20
+        for i, label in enumerate(self.PAUSE_OPTIONS):
+            sel = i == self.pause_index
+            if sel:
+                pygame.draw.rect(s, UI_BG_2, (12, y - 3, SCREEN_W - 24, 18))
+                pygame.draw.rect(s, UI_LINE, (12, y - 3, SCREEN_W - 24, 18), 1)
+                ui.text(s, ">", 16, y + 1, ACCENT)
+            ui.text(s, label, 26, y + 1, UI_TEXT if sel else UI_DIM)
+            y += 22
+
     def _section(self, label, y):
         """An amber section header with a rule running out to the margin."""
         s = self.scene
@@ -1208,6 +1367,8 @@ class Game:
 
         dot = GREEN if self.ai.status == "ok" else DANGER if self.ai.status == "down" else ACCENT
         pygame.draw.rect(s, dot, (SCREEN_W - 14, 10, 5, 5))
+        status_label = {"ok": "MODEL OK", "down": "MODEL OFFLINE", "unknown": "CHECKING"}[self.ai.status]
+        ui.text(s, status_label, SCREEN_W - 8 - ui.text_w(status_label), 18, UI_FAINT)
 
     def draw_ending(self):
         s = self.scene
@@ -1261,6 +1422,8 @@ class Game:
             self.draw_accuse()
         elif self.state == ENDING:
             self.draw_ending()
+        elif self.state == PAUSED:
+            self.draw_paused()
         else:
             self.draw_world()
             if self.state == TALKING:

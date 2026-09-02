@@ -16,7 +16,7 @@ from case import CASE, SUSPECTS_BY_ID
 
 BASE_URL = os.environ.get("LLM_URL", "http://localhost:1234/v1").rstrip("/")
 API_KEY = os.environ.get("LLM_KEY", "lm-studio")
-TIMEOUT = 300
+TIMEOUT = 90
 
 # The whole control block, loosely — individual key=value pairs are pulled
 # out of it separately so a model that omits a field (or a case that doesn't
@@ -53,10 +53,18 @@ class Client:
         self.busy = False
         self.status = "unknown"  # unknown | ok | down
         self.error = ""
+        self.generation = 0
+        self.checking = False
 
     # --- connection ------------------------------------------------------
 
     def check(self):
+        """Re-checkable at any time, including while `status == "down"` - the
+        game calls this periodically so starting LM Studio after the game
+        launches recovers on its own instead of requiring a restart."""
+        if self.checking:
+            return
+        self.checking = True
         threading.Thread(target=self._check, daemon=True).start()
 
     def _check(self):
@@ -71,13 +79,27 @@ class Client:
         except Exception as e:  # noqa: BLE001 - any failure means "not reachable"
             self.status = "down"
             self.error = f"{BASE_URL} is not answering ({e.__class__.__name__})."
+        finally:
+            self.checking = False
 
     # --- one turn --------------------------------------------------------
 
     def ask(self, messages):
         """Fire a request. The answer arrives via `poll()`."""
+        self.generation += 1
+        gen = self.generation
         self.busy = True
-        threading.Thread(target=self._ask, args=(messages,), daemon=True).start()
+        threading.Thread(target=self._ask, args=(messages, gen), daemon=True).start()
+
+    def cancel(self):
+        """Abandon the in-flight turn. There is no way to kill the worker
+        thread from here, so it keeps running to completion - but its result
+        is tagged with the generation it started under, and `poll()` silently
+        discards anything that doesn't match the current one. Bumping the
+        generation here is also what lets a fresh `ask()` proceed immediately
+        instead of being blocked by the stale turn's own `finally` clause."""
+        self.generation += 1
+        self.busy = False
 
     def _once(self, messages, temperature, max_tokens):
         data = _post(
@@ -90,10 +112,13 @@ class Client:
                 "stream": False,
             },
         )
-        choice = data["choices"][0]
-        return (choice["message"].get("content") or "").strip(), choice.get("finish_reason")
+        choices = data.get("choices") or []
+        if not choices:
+            raise RuntimeError("The model server returned no choices - check that a chat model is loaded.")
+        message = choices[0].get("message") or {}
+        return (message.get("content") or "").strip(), choices[0].get("finish_reason")
 
-    def _ask(self, messages):
+    def _ask(self, messages, gen):
         try:
             if not self.model:
                 self._check()
@@ -121,17 +146,28 @@ class Client:
                     "The model spent its whole budget thinking and never spoke. Try a "
                     "smaller or non-reasoning model in LM Studio."
                 )
-            self.results.put(("ok", content))
+            self.results.put((gen, "ok", content))
         except Exception as e:  # noqa: BLE001
-            self.results.put(("err", str(e)))
+            self.results.put((gen, "err", str(e)))
         finally:
-            self.busy = False
+            # Only clear `busy` if nothing has cancelled or superseded this
+            # turn since it started - otherwise a stale, just-finished
+            # request could stomp on a newer one already in flight.
+            if gen == self.generation:
+                self.busy = False
 
     def poll(self):
-        try:
-            return self.results.get_nowait()
-        except queue.Empty:
-            return None
+        """The next result for the *current* generation, or None. A result
+        from a turn that was cancelled or superseded carries an old
+        generation number and is dropped here rather than ever reaching the
+        game - `ask()`/`cancel()` already moved past it."""
+        while True:
+            try:
+                gen, kind, payload = self.results.get_nowait()
+            except queue.Empty:
+                return None
+            if gen == self.generation:
+                return kind, payload
 
 
 # --- prompt -----------------------------------------------------------------
@@ -148,7 +184,10 @@ def parse_tell(raw):
     block = TELL_BLOCK.search(raw)
     composure, delta, asked, concepts = None, 0, False, []
     if block:
-        fields = dict(TELL_FIELD.findall(block.group(1)))
+        # Field *names* are lowercased before lookup - TELL_BLOCK itself is
+        # case-insensitive on "TELL", but a model that also uppercases a
+        # field name (COMPOSURE=...) must not silently lose that field.
+        fields = {k.lower(): v for k, v in TELL_FIELD.findall(block.group(1))}
         if "composure" in fields:
             composure = fields["composure"].lower()
         if "pressure" in fields:
@@ -158,7 +197,13 @@ def parse_tell(raw):
                 delta = 0
         asked = fields.get("asked", "no").lower() in ("yes", "true", "1")
         concepts = [c for c in fields.get("concepts", "").lower().split(",") if c]
-    spoken = TELL_BLOCK.sub("", raw).strip()
+        spoken = TELL_BLOCK.sub("", raw).strip()
+    else:
+        # No complete [[TELL ... ]] block matched - either there never was
+        # one, or the model got cut off mid-block. Either way, a stray,
+        # unterminated "[[TELL" must never leak onto the player's screen as
+        # if it were dialogue.
+        spoken = re.split(r"\[\[TELL", raw, maxsplit=1, flags=re.I)[0].strip()
     spoken = re.sub(r"\s{2,}", " ", spoken)
     return spoken, composure, delta, asked, concepts
 
