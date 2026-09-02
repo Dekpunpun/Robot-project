@@ -822,13 +822,16 @@ class World:
         self._npc_spot("thorne", 77, 51)
 
         # ---- Harborview Square (the roads between everything) ------------------
-        put("fountain", 41, 28, solid=(4, 18, 40, 20))
-        row("bench", (38, 48), 34, solid=True)
-        for tx, ty in ((41, 27), (49, 27), (37, 33), (51, 33)):
+        # The plaza itself is the path fill at (34,30,20,12) - everything
+        # below has to actually sit inside that rectangle, not on the road
+        # feeding into it.
+        put("fountain", 41, 33, solid=(4, 18, 40, 20))
+        row("bench", (38, 48), 39, solid=True)
+        for tx, ty in ((37, 32), (51, 32), (37, 39), (51, 39)):
             put("plant", tx, ty, solid=True)
         for tx in (39, 45, 51):
-            put("sconce", tx, 27, oy=8)
-            lamp(tx, 28, 80)
+            put("sconce", tx, 31, oy=8)
+            lamp(tx, 32, 80)
 
         # The matchbook, dropped roadside where the gate footage caught the
         # handoff — between the vault and the square, not inside either.
