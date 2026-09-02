@@ -497,15 +497,22 @@ class World:
             {"rect": reach, "title": title, "body": body, "evidence": evidence}
         )
 
-    def _npc_spot(self, sid, tx, ty, ox=8, oy=20):
+    def _npc_spot(self, sid, tx, ty, ox=8, oy=20, zone=None, home_floor=None):
         """Reserve a standing spot for one of the four suspects. `main.py`
-        builds the NPC instance and its interactable from this."""
+        builds the NPC instance and its interactable from this.
+
+        `zone`/`home_floor` mark a suspect confined to one floor of a
+        multi-floor building (e.g. Doss only ever stands in the vault's
+        main level, never the basement) - `Game` uses them to keep the
+        suspect off every other floor of that zone."""
         x, y = tx * TILE + ox, ty * TILE + oy
         self.npc_spots[sid] = {
             "x": x,
             "y": y,
             "rect": pygame.Rect(x - 12, y - 26, 24, 26).inflate(16, 16),
             "blocker": pygame.Rect(x - 7, y - 10, 14, 10),
+            "zone": zone,
+            "home_floor": home_floor,
         }
 
     def _stairs(self, rect, zone, to_floor, label):
@@ -685,7 +692,7 @@ class World:
         self._register_floor("vault", "main", furnish_vault_main, active=True)
         self._register_floor("vault", "basement", furnish_vault_basement, active=False)
         # At his post by the checkout terminal, not blocking the doorway.
-        self._npc_spot("doss", 40, 8)
+        self._npc_spot("doss", 40, 8, zone="vault", home_floor="main")
 
         # ---- Harrow's Reach P.D.: Forensics -----------------------------------
         # A real room now, big enough for the full bench/microscope/cabinet/
@@ -754,7 +761,7 @@ class World:
         self._register_floor("command", "upper", furnish_command_upper, active=False)
         # Behind her own desk — a battalion commander receives you, she doesn't
         # meet you at the door.
-        self._npc_spot("ashworth", 76, 7)
+        self._npc_spot("ashworth", 76, 7, zone="command", home_floor="main")
 
         # ---- Third Precinct (home base) --------------------------------------
         put("desk", 13, 23, solid=True)

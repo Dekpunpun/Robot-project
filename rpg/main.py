@@ -89,20 +89,21 @@ class Game:
         self.fog_blob = art.make_light(84, colour=(170, 174, 194), strength=120)
 
         self.npcs = {}
+        self.npc_live_interactable = {}  # sid -> the interactable dict currently in world.interactables, if any
         for sid, spot in self.world.npc_spots.items():
             calm, broken = art.NPC_ART[SUSPECTS_BY_ID[sid]["sprite"]]
             self.npcs[sid] = NPC(sid, spot["x"], spot["y"], calm, broken)
             self.world.blockers.append(spot["blocker"])
-            self.world.interactables.append(
-                {
-                    "rect": spot["rect"],
-                    "title": SUSPECTS_BY_ID[sid]["name"],
-                    "body": None,
-                    "evidence": None,
-                    "npc": True,
-                    "suspect_id": sid,
-                }
-            )
+            interactable = {
+                "rect": spot["rect"],
+                "title": SUSPECTS_BY_ID[sid]["name"],
+                "body": None,
+                "evidence": None,
+                "npc": True,
+                "suspect_id": sid,
+            }
+            self.world.interactables.append(interactable)
+            self.npc_live_interactable[sid] = interactable
 
         self.box = ui.DialogBox()
         self.toast = ui.Toast()
@@ -175,6 +176,8 @@ class Game:
         self.accuse_index = 0
         self.accuse_confirm = None
         self.accuse_return = PLAYING
+        for zone, floor_name in self.world.floor_default.items():
+            self._sync_floor_npcs(zone, floor_name)
         for npc in self.npcs.values():
             npc.mood = "steady"
             npc.shake = 0.0
@@ -386,6 +389,7 @@ class Game:
             # of moving through the city is free.
             self.clock.advance(clockmod.COST_ENTER_BUILDING)
             self.world.switch_floor(target["zone"], target["to_floor"])
+            self._sync_floor_npcs(target["zone"], target["to_floor"])
             sfx.play("open")
             self.toast.show(target["title"].upper())
             return
@@ -457,6 +461,42 @@ class Game:
         for t, _ in due:
             warned.add(t)
         return due[-1][1]
+
+    def _sync_floor_npcs(self, zone, floor_name):
+        """A suspect confined to one floor of `zone` (via npc_spots'
+        zone/home_floor) must vanish - sprite, blocker, and interactable -
+        the instant the player is on any other floor of that building, and
+        reappear on returning. Suspects with no zone (single-floor
+        buildings) are untouched."""
+        for sid, spot in self.world.npc_spots.items():
+            if spot.get("zone") != zone:
+                continue
+            should_present = (
+                spot.get("home_floor") == floor_name
+                and not self.convo[sid].get("departed")
+            )
+            present = sid in self.npcs
+            if should_present and not present:
+                calm, broken = art.NPC_ART[SUSPECTS_BY_ID[sid]["sprite"]]
+                self.npcs[sid] = NPC(sid, spot["x"], spot["y"], calm, broken)
+                self.world.blockers.append(spot["blocker"])
+                interactable = {
+                    "rect": spot["rect"],
+                    "title": SUSPECTS_BY_ID[sid]["name"],
+                    "body": None,
+                    "evidence": None,
+                    "npc": True,
+                    "suspect_id": sid,
+                }
+                self.world.interactables.append(interactable)
+                self.npc_live_interactable[sid] = interactable
+            elif not should_present and present:
+                self.npcs.pop(sid, None)
+                if spot["blocker"] in self.world.blockers:
+                    self.world.blockers.remove(spot["blocker"])
+                live = self.npc_live_interactable.pop(sid, None)
+                if live is not None:
+                    World._drop(self.world.interactables, [live])
 
     def _update_departures(self):
         """Suspects on a schedule leave the map once their time comes, with
