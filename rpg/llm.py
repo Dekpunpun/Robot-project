@@ -23,6 +23,13 @@ TIMEOUT = 90
 # need one) never breaks parsing.
 TELL_BLOCK = re.compile(r"\[\[TELL(.*?)\]\]", re.I | re.S)
 TELL_FIELD = re.compile(r"(\w+)\s*=\s*([^\s\]]+)")
+SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
+
+# A hard backstop on top of RULES' own "1-4 sentences" - a model that just
+# won't stop can turn a short in-character answer into a wall of invented,
+# off-script rambling spanning many dialogue-box pages. This clamps the
+# *symptom* regardless of why the model overran.
+MAX_SPOKEN_SENTENCES = 6
 
 
 def _post(path, payload):
@@ -125,7 +132,7 @@ class Client:
                 if self.status != "ok":
                     raise RuntimeError(self.error)
 
-            content, finish = self._once(messages, 0.85, 2500)
+            content, finish = self._once(messages, 0.7, 700)
 
             # A reasoning model that ran out of room emits nothing but its
             # scratchpad. More tokens would only buy a longer spiral, so the
@@ -205,6 +212,9 @@ def parse_tell(raw):
         # if it were dialogue.
         spoken = re.split(r"\[\[TELL", raw, maxsplit=1, flags=re.I)[0].strip()
     spoken = re.sub(r"\s{2,}", " ", spoken)
+    sentences = SENTENCE_SPLIT.split(spoken)
+    if len(sentences) > MAX_SPOKEN_SENTENCES:
+        spoken = " ".join(sentences[:MAX_SPOKEN_SENTENCES])
     return spoken, composure, delta, asked, concepts
 
 
@@ -349,7 +359,8 @@ RULES:
 3. When the detective produces evidence, react like a person caught out - a pause, a correction, an excuse. Do not simply agree.
 4. Never volunteer the truth. Never mention {s['protects']} unless the detective raises it first.
 5. Speak 1-4 sentences. No narration, no stage directions, no asterisks. Spoken words only.
-6. {leave_line}
+6. Never invent new facts, names, places, or events beyond what is stated above. If the detective asks about something not covered here, stay vague, deflect, or say you don't know - do not make up specifics to fill the gap.
+7. {leave_line}
 
 After your reply, on its own final line, output exactly one control line:
 {control_help}
