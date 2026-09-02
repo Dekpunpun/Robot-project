@@ -50,6 +50,8 @@ CASE = {
         "The motor pool gate camera logs every vehicle in and out, timestamped, for the past week.",
         "A group calling itself the Cinder Compact is tied to two prior small bombings nearby.",
         "The audit was ordered off the back of an anonymous tip called in overnight.",
+        "A welfare-check review was opened on Sgt. Thorne after his last deployment. It was "
+        "never completed or filed.",
     ],
     "suspects": [
         {

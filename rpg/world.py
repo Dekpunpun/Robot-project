@@ -732,7 +732,11 @@ class World:
             put("desk", 75, 8, solid=True)
             put("chair", 76, 10, solid=(3, 10, 10, 6))
             put("cabinet", 70, 7, solid=True)
-            put("cabinet", 70, 10, solid=True)
+            personnel_cabinet = put("cabinet", 70, 10, solid=True)
+            self._look(personnel_cabinet, "A personnel file, left half-open",
+                       "Thorne's file, pulled and re-filed more than once. A welfare-check "
+                       "flag sits in it, dated months ago and never sent up the chain - no "
+                       "signature, no date filed. Someone kept meaning to.")
             put("plant", 81, 11, solid=True)
             put("cooler", 81, 7, solid=True)
             for tx in (71, 75, 80):

@@ -171,6 +171,7 @@ class Game:
                 "warned": set(),       # schedule warning thresholds already delivered
                 "departed": False,     # left the map per their schedule, if they have one
                 "last_typed": "",      # last real question the player typed (never a synthesized evidence string)
+                "broken": False,       # evidence_plus_question only: has their durable statement page unlocked
             }
             for sid in SUSPECTS_BY_ID
         }
@@ -668,6 +669,13 @@ class Game:
                 kw = brk["angle_keywords"]
                 if any(t in user_text for t in kw["topic"]) and any(a in user_text for a in kw["ask"]):
                     c["asked_directly"] = True
+            # Doss and Ashworth's break otherwise only changes their stance
+            # text - resolve() never looks at it, so without this it pays out
+            # nothing durable. First time both conditions hold, their
+            # concession becomes a permanent case-file statement page.
+            if not c["broken"] and brk["evidence"] in c["presented"] and c["asked_directly"]:
+                c["broken"] = True
+                self.toast.show(f"{s['name'].upper()} - STATEMENT ADDED TO CASE FILE")
 
         if brk["type"] == "conversational_trigger":
             c["concepts"] |= set(concepts)
@@ -782,7 +790,10 @@ class Game:
                 sfx.play("close")
                 self.state = PLAYING
             elif e.key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT):
-                last = len(self.found) + self.CASEFILE_INTRO_PAGES + len(self._transcript_pages()) - 1
+                last = (
+                    len(self.found) + self.CASEFILE_INTRO_PAGES
+                    + len(self._transcript_pages()) + len(self._statement_pages()) - 1
+                )
                 self.casefile_page = min(last, self.casefile_page + 1)
                 sfx.play("move")
             elif e.key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT):
@@ -1347,10 +1358,20 @@ class Game:
                 pages.append({"sid": sid, "part": i + 1, "total": len(chunks), "lines": chunk})
         return pages
 
+    def _statement_pages(self):
+        """sids whose evidence_plus_question break has been earned - see the
+        `c["broken"]` note in receive(). Doss and Ashworth only; Thorne's
+        confession is the ending itself, and Bricker already yields evidence."""
+        return [
+            sp["id"] for sp in CASE["suspects"]
+            if sp["break"]["type"] == "evidence_plus_question" and self.convo[sp["id"]]["broken"]
+        ]
+
     def draw_casefile(self):
         s = self.scene
         tpages = self._transcript_pages()
-        total = len(self.found) + self.CASEFILE_INTRO_PAGES + len(tpages)
+        spages = self._statement_pages()
+        total = len(self.found) + self.CASEFILE_INTRO_PAGES + len(tpages) + len(spages)
         footer = f"{self.casefile_page + 1}/{total}   ARROWS PAGE   A ACCUSE   TAB CLOSE"
         page = self.casefile_page
 
@@ -1423,21 +1444,36 @@ class Game:
                 ui.text(s, "[ PRESENTED ]", 14, SCREEN_H - 34, GREEN)
             return
 
-        # Transcript pages - what a suspect actually said, the thing the
-        # player is asked to catch contradicting itself and previously had
-        # no way to check back against once a line scrolled off the box.
-        tp = tpages[page - exhibit_end]
-        name = SUSPECTS_BY_ID[tp["sid"]]["name"].upper()
-        label = f"HRPD // TRANSCRIPT - {name}"
-        if tp["total"] > 1:
-            label += f" ({tp['part']}/{tp['total']})"
-        ui.terminal_frame(s, label, self.tick, footer)
-        y = 28
-        for kind, value in tp["lines"]:
-            if kind == "tag":
-                ui.text(s, value, 14, y, ACCENT if value == "YOU" else UI_TEXT)
-            else:
-                ui.text(s, value, 20, y, UI_DIM)
+        transcript_end = exhibit_end + len(tpages)
+        if page < transcript_end:
+            # Transcript pages - what a suspect actually said, the thing the
+            # player is asked to catch contradicting itself and previously had
+            # no way to check back against once a line scrolled off the box.
+            tp = tpages[page - exhibit_end]
+            name = SUSPECTS_BY_ID[tp["sid"]]["name"].upper()
+            label = f"HRPD // TRANSCRIPT - {name}"
+            if tp["total"] > 1:
+                label += f" ({tp['part']}/{tp['total']})"
+            ui.terminal_frame(s, label, self.tick, footer)
+            y = 28
+            for kind, value in tp["lines"]:
+                if kind == "tag":
+                    ui.text(s, value, 14, y, ACCENT if value == "YOU" else UI_TEXT)
+                else:
+                    ui.text(s, value, 20, y, UI_DIM)
+                y += 10
+            return
+
+        # Statement pages - Doss/Ashworth's evidence_plus_question break
+        # otherwise changes only their stance text and pays out nothing
+        # resolve() or the player ever sees. See the "broken" note in
+        # receive(). Deliberately not part of any conviction math.
+        sid = spages[page - transcript_end]
+        sp = SUSPECTS_BY_ID[sid]
+        ui.terminal_frame(s, f"HRPD // STATEMENT - {sp['name'].upper()}", self.tick, footer)
+        y = self._section("WHAT THEY ADMITTED", 28)
+        for line in ui.wrap(sp["concession"], SCREEN_W - 40):
+            ui.text(s, line, 18, y)
             y += 10
 
     def draw_title(self):
