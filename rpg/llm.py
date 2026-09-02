@@ -25,6 +25,25 @@ TELL_BLOCK = re.compile(r"\[\[TELL(.*?)\]\]", re.I | re.S)
 TELL_FIELD = re.compile(r"(\w+)\s*=\s*([^\s\]]+)")
 SENTENCE_SPLIT = re.compile(r"(?<=[.!?])\s+")
 
+# Hybrid-reasoning models (Qwen3 and friends) think in a hidden <think>...
+# </think> block before actually answering, by default, regardless of what
+# the system prompt asks for. Left unstripped this either leaks the whole
+# internal monologue onto the player's screen as "dialogue" (reads exactly
+# like hallucination) or - if it runs past max_tokens before closing the
+# tag - eats the entire token budget on a reply the player never sees at
+# all, forcing the expensive empty-content retry. `chat_template_kwargs`
+# below asks the server to turn thinking off outright; stripping here is
+# the backstop for servers/models that ignore that request.
+THINK_BLOCK = re.compile(r"<think>.*?</think>", re.I | re.S)
+
+
+def _strip_think(text):
+    text = THINK_BLOCK.sub("", text)
+    # An opened-but-never-closed tag means the whole visible budget was
+    # spent mid-thought - nothing after it is a real answer.
+    text = re.split(r"<think>", text, maxsplit=1, flags=re.I)[0]
+    return text.strip()
+
 # A hard backstop on top of RULES' own "1-4 sentences" - a model that just
 # won't stop can turn a short in-character answer into a wall of invented,
 # off-script rambling spanning many dialogue-box pages. This clamps the
@@ -117,13 +136,18 @@ class Client:
                 "temperature": temperature,
                 "max_tokens": max_tokens,
                 "stream": False,
+                # Qwen3's server-side switch for its default thinking mode.
+                # Silently ignored by any backend/model that doesn't
+                # recognise it, so this is safe to send unconditionally.
+                "chat_template_kwargs": {"enable_thinking": False},
             },
         )
         choices = data.get("choices") or []
         if not choices:
             raise RuntimeError("The model server returned no choices - check that a chat model is loaded.")
         message = choices[0].get("message") or {}
-        return (message.get("content") or "").strip(), choices[0].get("finish_reason")
+        content = _strip_think((message.get("content") or "").strip())
+        return content, choices[0].get("finish_reason")
 
     def _ask(self, messages, gen):
         try:
