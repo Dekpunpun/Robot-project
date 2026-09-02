@@ -89,7 +89,14 @@ class Game:
         self.fog_blob = art.make_light(84, colour=(170, 174, 194), strength=120)
 
         self.npcs = {}
-        self.npc_live_interactable = {}  # sid -> the interactable dict currently in world.interactables, if any
+        # One persistent interactable dict per suspect, built once and reused
+        # for their whole lifetime - floor switches and departures toggle its
+        # membership in world.interactables and mutate its fields in place,
+        # but never replace it. That's what lets a departure be found and
+        # repurposed regardless of which floor is currently live, and stops
+        # a floor-return or a run reset from ever creating a second, stale
+        # duplicate of it.
+        self.npc_interactable = {}
         for sid, spot in self.world.npc_spots.items():
             calm, broken = art.NPC_ART[SUSPECTS_BY_ID[sid]["sprite"]]
             self.npcs[sid] = NPC(sid, spot["x"], spot["y"], calm, broken)
@@ -103,7 +110,7 @@ class Game:
                 "suspect_id": sid,
             }
             self.world.interactables.append(interactable)
-            self.npc_live_interactable[sid] = interactable
+            self.npc_interactable[sid] = interactable
 
         self.box = ui.DialogBox()
         self.toast = ui.Toast()
@@ -176,6 +183,14 @@ class Game:
         self.accuse_index = 0
         self.accuse_confirm = None
         self.accuse_return = PLAYING
+        # A previous run may have repurposed a departed suspect's interactable
+        # into their vacated-post text - put every one back to its talkable,
+        # pristine state before the floor sync below decides who's live.
+        for sid, it in self.npc_interactable.items():
+            it["npc"] = True
+            it["suspect_id"] = sid
+            it["body"] = None
+            it["evidence"] = None
         for zone, floor_name in self.world.floor_default.items():
             self._sync_floor_npcs(zone, floor_name)
         for npc in self.npcs.values():
@@ -467,42 +482,47 @@ class Game:
         zone/home_floor) must vanish - sprite, blocker, and interactable -
         the instant the player is on any other floor of that building, and
         reappear on returning. Suspects with no zone (single-floor
-        buildings) are untouched."""
+        buildings) are untouched.
+
+        The interactable's *presence* in the live list is floor-only: it
+        stays scoped to the suspect's home floor even after they've departed
+        and it's been repurposed into a vacated-post reveal, so that reveal
+        doesn't leak onto every other floor of the building. The sprite and
+        blocker additionally require they haven't departed - a gone suspect
+        leaves no body behind, just the empty post."""
         for sid, spot in self.world.npc_spots.items():
             if spot.get("zone") != zone:
                 continue
-            should_present = (
-                spot.get("home_floor") == floor_name
-                and not self.convo[sid].get("departed")
-            )
+            on_home_floor = spot.get("home_floor") == floor_name
+            it = self.npc_interactable[sid]
+            it_live = it in self.world.interactables
+            if on_home_floor and not it_live:
+                self.world.interactables.append(it)
+            elif not on_home_floor and it_live:
+                World._drop(self.world.interactables, [it])
+
+            should_show_sprite = on_home_floor and not self.convo[sid].get("departed")
             present = sid in self.npcs
-            if should_present and not present:
+            if should_show_sprite and not present:
                 calm, broken = art.NPC_ART[SUSPECTS_BY_ID[sid]["sprite"]]
                 self.npcs[sid] = NPC(sid, spot["x"], spot["y"], calm, broken)
                 self.world.blockers.append(spot["blocker"])
-                interactable = {
-                    "rect": spot["rect"],
-                    "title": SUSPECTS_BY_ID[sid]["name"],
-                    "body": None,
-                    "evidence": None,
-                    "npc": True,
-                    "suspect_id": sid,
-                }
-                self.world.interactables.append(interactable)
-                self.npc_live_interactable[sid] = interactable
-            elif not should_present and present:
+            elif not should_show_sprite and present:
                 self.npcs.pop(sid, None)
                 if spot["blocker"] in self.world.blockers:
                     self.world.blockers.remove(spot["blocker"])
-                live = self.npc_live_interactable.pop(sid, None)
-                if live is not None:
-                    World._drop(self.world.interactables, [live])
 
     def _update_departures(self):
         """Suspects on a schedule leave the map once their time comes, with
         an empty, examinable post left behind as the only explanation. Only
         checked while PLAYING (never mid-conversation) so a suspect can't be
-        pulled out from under an interview in progress."""
+        pulled out from under an interview in progress.
+
+        This fires regardless of which floor the player is currently on -
+        `_sync_floor_npcs` reads the fields set here through the same
+        persistent interactable dict, so the vacated post shows up whenever
+        the player is next on the suspect's home floor, never before and
+        never on any other floor."""
         for sid, sched in ((s["id"], s.get("schedule")) for s in CASE["suspects"]):
             if not sched or self.convo[sid].get("departed"):
                 continue
@@ -513,13 +533,11 @@ class Game:
             self.npcs.pop(sid, None)
             if spot["blocker"] in self.world.blockers:
                 self.world.blockers.remove(spot["blocker"])
-            for it in self.world.interactables:
-                if it.get("suspect_id") == sid:
-                    it["npc"] = False
-                    it["suspect_id"] = None
-                    it["body"] = sched["vacated"]
-                    it["evidence"] = None
-                    break
+            it = self.npc_interactable[sid]
+            it["npc"] = False
+            it["suspect_id"] = None
+            it["body"] = sched["vacated"]
+            it["evidence"] = None
             self.toast.show(f"{SUSPECTS_BY_ID[sid]['name'].upper()} HAS LEFT")
 
     def say_suspect(self, sid, line):
