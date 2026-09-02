@@ -21,7 +21,10 @@ CASE = {
             "they are - though nobody has told you that part yet. Third "
             "Precinct is yours to leave whenever you're ready."
         ),
-        "spawn": (32, 47),
+        # Inside the Third Precinct bullpen — the opening line hands the
+        # detective their own home base to leave when they're ready, so the
+        # run starts there rather than out in the open.
+        "spawn": (11, 24),
     },
     "victim": {
         "name": "Mira Thorne",
@@ -118,6 +121,17 @@ CASE = {
                 "type": "evidence_plus_question",
                 "evidence": "vault-ledger",
                 "angle": "asking him plainly, directly, what the ledger pattern actually means",
+                # Deterministic backstop: a model that never self-reports
+                # asked=yes (weak model, or just an inconsistent judgment
+                # call) can't stall a player who plainly asked the right
+                # thing. Matches a topic word AND a question word anywhere
+                # in the player's own text (never the model's reply) rather
+                # than an exact phrase, since real phrasing reorders freely
+                # ("what does the pattern in that ledger actually mean?").
+                "angle_keywords": {
+                    "topic": ["pattern", "ledger", "log", "checkout", "override", "signature"],
+                    "ask": ["mean", "means", "explain", "going on", "happened", "why", "walk me through"],
+                },
             },
             "schedule": {
                 "leaves_at": 150,
@@ -162,6 +176,10 @@ CASE = {
                 "type": "evidence_plus_question",
                 "evidence": "vault-ledger",
                 "angle": "showing her the log and asking specifically why she never filed the welfare-check flag on Thorne",
+                "angle_keywords": {
+                    "topic": ["welfare", "flag", "flagged"],
+                    "ask": ["why", "file", "filed", "filing", "report", "sat on", "sit on"],
+                },
             },
             "schedule": {
                 "leaves_at": 210,

@@ -49,7 +49,7 @@ class Game:
         self.screen = pygame.display.set_mode((SCREEN_W * SCALE, SCREEN_H * SCALE))
         pygame.display.set_caption(TITLE)
         self.scene = pygame.Surface((SCREEN_W, SCREEN_H))
-        self.clock = pygame.time.Clock()
+        self.fps_clock = pygame.time.Clock()
         self.tick = 0
         self.fullscreen = False
 
@@ -58,7 +58,10 @@ class Game:
         self.minimap_base = self._build_minimap_base()
         self.minimap_fog = pygame.Surface((MAP_W, MAP_H), pygame.SRCALPHA)
         self.minimap_fog.fill((6, 6, 16, 255))
-        self.minimap_reveal = self._build_minimap_reveal_mask(6)
+        # Reveal radius scales with the map, so a bigger city doesn't mean a
+        # proportionally slower-clearing fog.
+        self.minimap_reveal = self._build_minimap_reveal_mask(max(6, MAP_W // 11))
+        self.minimap_size = self._minimap_size()
         self._reveal_minimap()
         self.dust_sprite = pygame.Surface((3, 3), pygame.SRCALPHA)
         pygame.draw.circle(self.dust_sprite, (255, 226, 168, 150), (1, 1), 1)
@@ -145,6 +148,7 @@ class Game:
 
     def reset_run(self):
         self.clock = clockmod.Clock()
+        self.world.reset_floors()
         self.found = []  # evidence ids picked up in the world (or unlocked by dialogue)
         self.convo = {
             sid: {
@@ -237,17 +241,31 @@ class Game:
         my = int(self.player.y / TILE)
         self.minimap_fog.blit(self.minimap_reveal, (mx - r, my - r), special_flags=pygame.BLEND_RGBA_SUB)
 
+    # The most screen the minimap may ever take, in scene pixels. Drawing it
+    # one pixel per tile instead ties a HUD element's size to the size of the
+    # city, so redrawing the map silently grows the thing covering the view.
+    MINIMAP_MAX = (72, 56)
+
+    def _minimap_size(self):
+        fit = min(1.0, self.MINIMAP_MAX[0] / MAP_W, self.MINIMAP_MAX[1] / MAP_H)
+        return max(1, int(MAP_W * fit)), max(1, int(MAP_H * fit))
+
     def draw_minimap(self):
         composite = self.minimap_base.copy()
         composite.blit(self.minimap_fog, (0, 0))
+        mw, mh = self.minimap_size
+        if (mw, mh) != (MAP_W, MAP_H):
+            composite = pygame.transform.scale(composite, (mw, mh))
+        # Markers go on after the scale, so shrinking can never erase a dot.
+        sx, sy = mw / MAP_W, mh / MAP_H
         for npc in self.npcs.values():
             mx, my = int(npc.x / TILE), int(npc.y / TILE)
             if 0 <= mx < MAP_W and 0 <= my < MAP_H and self.minimap_fog.get_at((mx, my))[3] < 120:
-                composite.set_at((mx, my), DANGER)
+                composite.fill(DANGER, (int(mx * sx), int(my * sy), 2, 2))
         px, py = int(self.player.x / TILE), int(self.player.y / TILE)
         if 0 <= px < MAP_W and 0 <= py < MAP_H:
-            composite.set_at((px, py), ACCENT)
-        ui.panel(self.scene, (6, 6, MAP_W + 6, MAP_H + 6), UI_BG, UI_LINE)
+            composite.fill(ACCENT, (int(px * sx), int(py * sy), 2, 2))
+        ui.panel(self.scene, (6, 6, mw + 6, mh + 6), UI_BG, UI_LINE)
         self.scene.blit(composite, (9, 9))
 
     # -- weather -----------------------------------------------------------
@@ -360,6 +378,16 @@ class Game:
             return
         if target.get("npc"):
             self.begin_interview(target["suspect_id"])
+            return
+
+        if target.get("stairs"):
+            # Costs what a doorway costs: a flight of stairs is traversal, and
+            # the clock is the run's whole source of pressure - no other way
+            # of moving through the city is free.
+            self.clock.advance(clockmod.COST_ENTER_BUILDING)
+            self.world.switch_floor(target["zone"], target["to_floor"])
+            sfx.play("open")
+            self.toast.show(target["title"].upper())
             return
 
         self.clock.advance(clockmod.COST_EXAMINE)
@@ -518,8 +546,20 @@ class Game:
         floor = min(95.0, float(sum(EVIDENCE_BY_ID[e]["pressure"] for e in c["presented"])))
         c["pressure"] = max(c["pressure"], floor)
 
-        if brk["type"] == "evidence_plus_question" and asked:
-            c["asked_directly"] = True
+        if brk["type"] == "evidence_plus_question":
+            if asked:
+                c["asked_directly"] = True
+            elif brk.get("angle_keywords"):
+                # Deterministic backstop, same idea as Bricker's below: the
+                # model's own asked=yes/no judgment is the only signal this
+                # had before, and a model that never sets it to yes stalls
+                # the suspect forever no matter how plainly the player asks.
+                # A topic word plus a question word, anywhere in the text,
+                # rather than an exact phrase - real phrasing reorders freely.
+                user_text = (c["history"][-2]["content"] if len(c["history"]) >= 2 else "").lower()
+                kw = brk["angle_keywords"]
+                if any(t in user_text for t in kw["topic"]) and any(a in user_text for a in kw["ask"]):
+                    c["asked_directly"] = True
 
         if brk["type"] == "conversational_trigger":
             c["concepts"] |= set(concepts)
@@ -938,7 +978,12 @@ class Game:
             t = self.world.interactable_near((self.player.x, self.player.y - 8), self.player_zone)
             if t:
                 cam = self.camera
-                ui.prompt(s, "E  LOOK" if not t.get("npc") else "E  TALK",
+                # Stairs get their own verb: pressing E there moves the player
+                # to another floor, which "LOOK" gives no warning of - and the
+                # prompt is the only thing advertising that a second floor is
+                # down there at all.
+                verb = "E  TALK" if t.get("npc") else "E  STAIRS" if t.get("stairs") else "E  LOOK"
+                ui.prompt(s, verb,
                           int(t["rect"].centerx) - cam[0], int(t["rect"].top) - cam[1] - 18)
             ui.text(s, "TAB  CASE FILE", 6, SCREEN_H - 12, UI_FAINT)
 
@@ -1240,7 +1285,7 @@ class Game:
 
     def _run(self):
         while True:
-            dt = min(self.clock.tick(FPS) / 1000.0, 0.05)
+            dt = min(self.fps_clock.tick(FPS) / 1000.0, 0.05)
             for e in pygame.event.get():
                 if e.type == pygame.QUIT:
                     self.quit()

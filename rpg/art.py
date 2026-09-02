@@ -668,32 +668,38 @@ def tile_wainscot(seed):
 # from across the map.
 
 ROOF_STYLES = {
+    # Cooler grey-blue concrete and a flat, near-parapet cap - facade_rows is
+    # high so most of the structure reads as wall, only a thin flat lid on
+    # top, the way an actual bunker roofline would.
     "military": dict(
-        back=(66, 72, 66), front=(90, 98, 88), cap=(122, 132, 118),
-        eave=(34, 38, 36), trim=(48, 54, 50), vents=True,
-        wall=(104, 108, 100), wall_d=(68, 72, 66), wall_l=(132, 136, 126),
-        course="block"),
+        back=(36, 39, 44), front=(52, 55, 59), cap=(59, 62, 66),
+        eave=(26, 29, 34), trim=(40, 43, 48), vents=True,
+        wall=(74, 77, 82), wall_d=(48, 50, 53), wall_l=(94, 98, 104),
+        course="block", facade_rows=4),
+    # A steep, dramatic true gable - facade_rows is low so most of the
+    # structure reads as roof.
     "civic": dict(
-        back=(92, 46, 42), front=(124, 64, 54), cap=(160, 88, 72),
-        eave=(52, 26, 24), trim=(70, 34, 30), sign=True,
-        wall=(116, 76, 64), wall_d=(78, 48, 40), wall_l=(146, 100, 84),
-        course="brick"),
+        back=(50, 36, 31), front=(66, 52, 46), cap=(73, 59, 53),
+        eave=(40, 26, 21), trim=(54, 40, 35), sign=True,
+        wall=(90, 63, 54), wall_d=(59, 41, 35), wall_l=(114, 80, 69),
+        course="brick", facade_rows=1),
     "house": dict(
-        back=(66, 50, 44), front=(92, 70, 56), cap=(122, 94, 72),
-        eave=(40, 30, 26), trim=(52, 38, 32), chimney=True,
-        wall=(126, 100, 74), wall_d=(84, 66, 48), wall_l=(154, 126, 96),
+        back=(34, 24, 17), front=(50, 40, 32), cap=(57, 47, 39),
+        eave=(24, 14, 7), trim=(38, 28, 21), chimney=True,
+        wall=(74, 58, 44), wall_d=(48, 38, 29), wall_l=(94, 74, 56),
         course="board"),
     "cabin": dict(
-        back=(52, 60, 54), front=(72, 82, 70), cap=(96, 108, 92),
-        eave=(32, 38, 34), trim=(42, 48, 42), chimney=True,
-        wall=(100, 96, 84), wall_d=(66, 64, 56), wall_l=(126, 122, 106),
+        back=(28, 21, 14), front=(44, 37, 29), cap=(51, 44, 36),
+        eave=(18, 11, 4), trim=(32, 25, 18), chimney=True,
+        wall=(70, 60, 46), wall_d=(46, 39, 30), wall_l=(89, 76, 58),
         course="board"),
-    # Institutional: pale rendered walls and a low grey roof with vents.
+    # Institutional: pale rendered walls, a low flat roof with vents - the
+    # same bunker-flat proportions as military.
     "lab": dict(
-        back=(74, 84, 86), front=(100, 112, 112), cap=(134, 148, 146),
-        eave=(40, 46, 48), trim=(56, 64, 66), vents=True,
-        wall=(168, 172, 166), wall_d=(120, 124, 120), wall_l=(198, 202, 194),
-        course="block"),
+        back=(50, 54, 59), front=(66, 70, 74), cap=(73, 77, 81),
+        eave=(40, 44, 49), trim=(54, 58, 63), vents=True,
+        wall=(122, 128, 136), wall_d=(79, 83, 88), wall_l=(155, 163, 173),
+        course="block", facade_rows=4),
 }
 
 
@@ -772,6 +778,98 @@ def obj_facade_door(style):
         pygame.draw.rect(s, BRASS_D, (11, 14, 2, 1))
     # Threshold, so the door meets the ground instead of floating on the wall.
     pygame.draw.rect(s, p["wall_l"], (0, 23, 16, 1))
+    return s
+
+
+def obj_door_vault():
+    """The vault's own door - thicker steel, a lockwheel instead of a knob,
+    twin heavy hinges. Built to keep five tons of ordnance in, not to keep
+    an office private."""
+    p = ROOF_STYLES["military"]
+    s = _surf(16, 24)
+    pygame.draw.rect(s, p["wall_d"], (0, 0, 16, 24))
+    pygame.draw.rect(s, p["wall_l"], (0, 0, 16, 2))
+    pygame.draw.rect(s, INK, (0, 0, 16, 24), 1)
+    leaf, dark, light = (70, 74, 78), (46, 50, 54), (112, 116, 120)
+    pygame.draw.rect(s, leaf, (1, 2, 14, 21))
+    pygame.draw.rect(s, light, (1, 2, 14, 1))
+    pygame.draw.rect(s, dark, (1, 21, 14, 2))
+    for hy in (5, 17):  # heavy hinge barrels down one edge
+        pygame.draw.rect(s, dark, (1, hy, 3, 4))
+        pygame.draw.rect(s, light, (1, hy, 3, 1))
+    pygame.draw.circle(s, dark, (9, 12), 5)
+    pygame.draw.circle(s, light, (9, 12), 5, 1)
+    for ang in range(0, 360, 60):
+        rad = math.radians(ang)
+        pygame.draw.line(s, dark, (9, 12), (9 + int(4 * math.cos(rad)), 12 + int(4 * math.sin(rad))))
+    pygame.draw.circle(s, (32, 34, 36), (9, 12), 2)  # the wheel's hub
+    pygame.draw.rect(s, p["wall_l"], (0, 23, 16, 1))
+    return s
+
+
+def obj_door_motorpool():
+    """A wide bay shutter, corrugated top to bottom - reads as roll-up even
+    though it sits in the same door slot as everything else."""
+    p = ROOF_STYLES["military"]
+    s = _surf(16, 24)
+    pygame.draw.rect(s, p["wall_d"], (0, 0, 16, 24))
+    pygame.draw.rect(s, p["wall_l"], (0, 0, 16, 2))
+    pygame.draw.rect(s, INK, (0, 0, 16, 24), 1)
+    leaf, dark, light = (96, 100, 104), (64, 68, 72), (134, 138, 140)
+    pygame.draw.rect(s, leaf, (1, 2, 14, 21))
+    for y in range(3, 22, 3):  # corrugated ribs
+        pygame.draw.line(s, dark, (1, y), (14, y))
+        pygame.draw.line(s, light, (1, y + 1), (14, y + 1))
+    pygame.draw.rect(s, dark, (1, 21, 14, 2))
+    pygame.draw.rect(s, (178, 182, 184), (6, 11, 4, 2))  # pull handle
+    pygame.draw.rect(s, p["wall_l"], (0, 23, 16, 1))
+    return s
+
+
+def obj_door_precinct():
+    """The precinct's timber door under a canvas awning - the one entrance in
+    the city that announces itself before you reach it."""
+    p = ROOF_STYLES["civic"]
+    s = _surf(16, 24)
+    awning, awning_d = (138, 88, 46), (94, 58, 28)
+    pygame.draw.polygon(s, awning, [(0, 3), (16, 3), (13, 0), (3, 0)])
+    pygame.draw.polygon(s, awning_d, [(0, 3), (16, 3), (13, 0), (3, 0)], 1)
+    for x in range(2, 15, 4):
+        pygame.draw.line(s, awning_d, (x, 0), (x - 1, 3))
+    pygame.draw.rect(s, INK, (0, 3, 16, 21), 1)
+    leaf, dark, light = (116, 78, 50), (74, 50, 32), (146, 104, 68)
+    pygame.draw.rect(s, leaf, (2, 5, 12, 18))
+    pygame.draw.rect(s, light, (2, 5, 12, 1))
+    for y in (7, 15):
+        pygame.draw.rect(s, dark, (4, y, 8, 6))
+        pygame.draw.rect(s, light, (4, y + 5, 8, 1))
+        pygame.draw.rect(s, INK, (4, y, 8, 6), 1)
+    pygame.draw.rect(s, BRASS, (11, 12, 2, 2))
+    pygame.draw.rect(s, BRASS_D, (11, 14, 2, 1))
+    pygame.draw.rect(s, p["wall_l"], (0, 23, 16, 1))
+    return s
+
+
+def obj_window_vault():
+    """A narrow observation slit rather than a proper window - nobody looks
+    out of a vault to enjoy the view."""
+    p = ROOF_STYLES["military"]
+    s = _surf(12, 12)
+    _box(s, (0, 0, 12, 12), (46, 40, 36), p["wall_l"], INK)
+    pygame.draw.rect(s, LAMP, (5, 2, 2, 8))
+    pygame.draw.rect(s, GLOW, (5, 2, 2, 3))
+    return s
+
+
+def obj_stairs():
+    """A stairwell, drawn top-down so it reads as an opening in the floor
+    rather than a door - used both ways, up and down, between a building's
+    two floors."""
+    s = _surf(24, 24)
+    _box(s, (2, 2, 20, 20), (28, 26, 24), (44, 40, 36), INK)
+    for i, y in enumerate(range(5, 20, 3)):
+        shade = 24 + i * 6
+        pygame.draw.rect(s, (shade, shade - 2, shade - 4), (4, y, 16, 2))
     return s
 
 
@@ -1739,6 +1837,11 @@ def build_objects():
         "hydrant": obj_hydrant(),
         **{f"window_{s}": obj_facade_window(s) for s in ROOF_STYLES},
         **{f"door_{s}": obj_facade_door(s) for s in ROOF_STYLES},
+        "door_vault": obj_door_vault(),
+        "door_motorpool": obj_door_motorpool(),
+        "door_precinct": obj_door_precinct(),
+        "window_vault": obj_window_vault(),
+        "stairs": obj_stairs(),
         "roof_vent": obj_roof_vent(),
         "roof_sign": obj_roof_sign(),
         "bunk": obj_bunk(),
