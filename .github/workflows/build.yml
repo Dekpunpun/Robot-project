@@ -45,7 +45,12 @@ jobs:
 
       # Renders a frame and asserts the pixel font was packaged. Without this a
       # broken build still "succeeds" and only looks wrong once you run it.
+      # Forced to bash on both platforms - the Windows runner's default shell
+      # is PowerShell, which can't execute a quoted path directly like this
+      # (it needs the "&" call operator instead), so this step failed on
+      # Windows with a ParserError before it ever reached the actual game.
       - name: Verify the build runs
+        shell: bash
         env:
           SDL_VIDEODRIVER: dummy
           SDL_AUDIODRIVER: dummy
