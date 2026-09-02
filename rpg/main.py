@@ -735,6 +735,7 @@ class Game:
             "prose": ending_def["prose"],
             "closed_at": self.clock.hhmm,
         }
+        self.ending_page = 0
         self.state = ENDING
         sfx.play("win" if shape == "correct_strong" else "lose")
 
@@ -765,6 +766,9 @@ class Game:
                 self.zone_id = self.world.zone_at(self.player.x, self.player.y)
                 self.transition = None
                 self.state = TITLE_SCREEN
+            elif e.key in (pygame.K_TAB, pygame.K_LEFT, pygame.K_RIGHT):
+                self.ending_page = 1 - self.ending_page
+                sfx.play("move")
             elif e.key == pygame.K_ESCAPE:
                 self.quit()
             return
@@ -778,7 +782,8 @@ class Game:
                 sfx.play("close")
                 self.state = PLAYING
             elif e.key in (pygame.K_DOWN, pygame.K_s, pygame.K_RIGHT):
-                self.casefile_page = min(len(self.found), self.casefile_page + 1)
+                last = len(self.found) + self.CASEFILE_INTRO_PAGES + len(self._transcript_pages()) - 1
+                self.casefile_page = min(last, self.casefile_page + 1)
                 sfx.play("move")
             elif e.key in (pygame.K_UP, pygame.K_w, pygame.K_LEFT):
                 self.casefile_page = max(0, self.casefile_page - 1)
@@ -1305,13 +1310,88 @@ class Game:
         pygame.draw.line(s, UI_LINE, (18 + ui.text_w(label), y + 4), (SCREEN_W - 15, y + 4))
         return y + 12
 
+    # Pages before the exhibits: briefing (the opening, re-readable), the
+    # scene, the timeline, established facts, then the existing
+    # victim/suspects roster. Everything here was already written in
+    # case.py and fed to the model - none of it reached the player before.
+    CASEFILE_INTRO_PAGES = 5
+
+    # How many transcript lines fit between the header and footer chrome.
+    LOG_LINES_PER_PAGE = 18
+
+    def _transcript_pages(self):
+        """Every suspect who's been talked to gets their full exchange log
+        flattened and chunked into fixed-size pages, in suspect order - a
+        long interview simply spans more pages rather than being silently
+        clamped (main.py used to write c["log"] and never read it back).
+        Recomputed on demand: conversations are short, and this only runs
+        while the case file is open."""
+        pages = []
+        for sp in CASE["suspects"]:
+            sid = sp["id"]
+            log = [entry for entry in self.convo[sid]["log"] if entry[0] != "system"]
+            if not log:
+                continue
+            # Every element here is exactly one on-screen row - a tag gets
+            # its own row rather than sharing one with the first wrapped
+            # line, so chunking by row count below can never under-count
+            # what the draw loop actually renders.
+            lines = []
+            for speaker, text_ in log:
+                tag = "YOU" if speaker == "you" else sp["name"].upper()
+                lines.append(("tag", tag))
+                for line in ui.wrap(text_, SCREEN_W - 40) or [""]:
+                    lines.append(("text", line))
+            chunks = [lines[i:i + self.LOG_LINES_PER_PAGE] for i in range(0, len(lines), self.LOG_LINES_PER_PAGE)]
+            for i, chunk in enumerate(chunks):
+                pages.append({"sid": sid, "part": i + 1, "total": len(chunks), "lines": chunk})
+        return pages
+
     def draw_casefile(self):
         s = self.scene
-        footer = (
-            f"{self.casefile_page + 1}/{len(self.found) + 1}   "
-            "ARROWS PAGE   A ACCUSE   TAB CLOSE"
-        )
-        if self.casefile_page == 0:
+        tpages = self._transcript_pages()
+        total = len(self.found) + self.CASEFILE_INTRO_PAGES + len(tpages)
+        footer = f"{self.casefile_page + 1}/{total}   ARROWS PAGE   A ACCUSE   TAB CLOSE"
+        page = self.casefile_page
+
+        if page == 0:
+            ui.terminal_frame(s, "HRPD // BRIEFING", self.tick, footer)
+            y = self._section("00:12 - THE CALL", 28)
+            for line in ui.wrap(CASE["meta"]["opening"], SCREEN_W - 40):
+                ui.text(s, line, 18, y)
+                y += 10
+            return
+
+        if page == 1:
+            ui.terminal_frame(s, "HRPD // THE SCENE", self.tick, footer)
+            y = self._section("SCENE", 28)
+            for line in ui.wrap(CASE["scene"], SCREEN_W - 40):
+                ui.text(s, line, 18, y)
+                y += 10
+            return
+
+        if page == 2:
+            ui.terminal_frame(s, "HRPD // TIMELINE", self.tick, footer)
+            y = self._section("TIMELINE", 28)
+            for when, what in CASE["timeline"]:
+                ui.text(s, when, 18, y, ACCENT)
+                y += 10
+                for line in ui.wrap(what, SCREEN_W - 44):
+                    ui.text(s, line, 24, y, UI_DIM)
+                    y += 10
+                y += 3
+            return
+
+        if page == 3:
+            ui.terminal_frame(s, "HRPD // ESTABLISHED FACTS", self.tick, footer)
+            y = self._section("WHAT'S KNOWN - CAN'T BE CONTRADICTED", 28)
+            for fact in CASE["facts"]:
+                for line in ui.wrap(f"- {fact}", SCREEN_W - 40):
+                    ui.text(s, line, 18, y)
+                    y += 10
+            return
+
+        if page == 4:
             ui.terminal_frame(s, "HRPD // CASE FILE 44-C", self.tick, footer)
             y = self._section("VICTIM", 28)
             for line in ui.wrap(f"{CASE['victim']['name']}. {CASE['victim']['detail']}", SCREEN_W - 40):
@@ -1323,9 +1403,13 @@ class Game:
                 y += 10
                 ui.text(s, ui.wrap(sp["role"], SCREEN_W - 34)[0], 18, y, UI_FAINT)
                 y += 12
-        else:
-            ev = EVIDENCE_BY_ID[self.found[self.casefile_page - 1]]
-            ui.terminal_frame(s, f"HRPD // EXHIBIT {self.casefile_page}", self.tick, footer)
+            return
+
+        exhibit_end = self.CASEFILE_INTRO_PAGES + len(self.found)
+        if page < exhibit_end:
+            exhibit_num = page - self.CASEFILE_INTRO_PAGES + 1
+            ev = EVIDENCE_BY_ID[self.found[page - self.CASEFILE_INTRO_PAGES]]
+            ui.terminal_frame(s, f"HRPD // EXHIBIT {exhibit_num}", self.tick, footer)
             ui.text(s, ev["name"].upper()[:36], 14, 28, UI_TEXT)
             y = 44
             for line in ui.wrap(ev["detail"], SCREEN_W - 40):
@@ -1337,6 +1421,24 @@ class Game:
                 y += 10
             if any(ev["id"] in c["presented"] for c in self.convo.values()):
                 ui.text(s, "[ PRESENTED ]", 14, SCREEN_H - 34, GREEN)
+            return
+
+        # Transcript pages - what a suspect actually said, the thing the
+        # player is asked to catch contradicting itself and previously had
+        # no way to check back against once a line scrolled off the box.
+        tp = tpages[page - exhibit_end]
+        name = SUSPECTS_BY_ID[tp["sid"]]["name"].upper()
+        label = f"HRPD // TRANSCRIPT - {name}"
+        if tp["total"] > 1:
+            label += f" ({tp['part']}/{tp['total']})"
+        ui.terminal_frame(s, label, self.tick, footer)
+        y = 28
+        for kind, value in tp["lines"]:
+            if kind == "tag":
+                ui.text(s, value, 14, y, ACCENT if value == "YOU" else UI_TEXT)
+            else:
+                ui.text(s, value, 20, y, UI_DIM)
+            y += 10
 
     def draw_title(self):
         s = self.scene
@@ -1373,7 +1475,21 @@ class Game:
     def draw_ending(self):
         s = self.scene
         e = self.ending
-        ui.terminal_frame(s, "HRPD // DISPOSITION", self.tick, "ENTER  NEW CASE")
+
+        if self.ending_page == 1:
+            # The full solution is written (case.py's CASE["solution"]) but
+            # was never shown anywhere - most pointedly after wrong_suspect,
+            # where the player learns only that they were wrong and never
+            # who did it or why.
+            ui.terminal_frame(s, "HRPD // WHAT ACTUALLY HAPPENED", self.tick, "TAB DISPOSITION   ENTER NEW CASE")
+            y = self._section("THE TRUTH OF IT", 28)
+            room = (SCREEN_H - 26 - y) // 10
+            for line in ui.wrap(CASE["solution"], SCREEN_W - 34)[:room]:
+                ui.text(s, line, 14, y, UI_DIM)
+                y += 10
+            return
+
+        ui.terminal_frame(s, "HRPD // DISPOSITION", self.tick, "ENTER NEW CASE   TAB WHAT HAPPENED")
         heads = {
             "correct_strong": ("CASE CLOSED", GREEN),
             "wrong_suspect": ("CASE GONE COLD", DANGER),
