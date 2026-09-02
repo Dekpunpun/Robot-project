@@ -47,8 +47,11 @@ def _strip_think(text):
 # A hard backstop on top of RULES' own "1-4 sentences" - a model that just
 # won't stop can turn a short in-character answer into a wall of invented,
 # off-script rambling spanning many dialogue-box pages. This clamps the
-# *symptom* regardless of why the model overran.
-MAX_SPOKEN_SENTENCES = 6
+# *symptom* regardless of why the model overran. Matches the RULES text
+# exactly (4, not some looser buffer) - long run-on "sentences" still get a
+# second, character-based cut below.
+MAX_SPOKEN_SENTENCES = 4
+MAX_SPOKEN_CHARS = 320
 
 
 def _post(path, payload):
@@ -156,7 +159,7 @@ class Client:
                 if self.status != "ok":
                     raise RuntimeError(self.error)
 
-            content, finish = self._once(messages, 0.7, 700)
+            content, finish = self._once(messages, 0.7, 450)
 
             # A reasoning model that ran out of room emits nothing but its
             # scratchpad. More tokens would only buy a longer spiral, so the
@@ -239,6 +242,15 @@ def parse_tell(raw):
     sentences = SENTENCE_SPLIT.split(spoken)
     if len(sentences) > MAX_SPOKEN_SENTENCES:
         spoken = " ".join(sentences[:MAX_SPOKEN_SENTENCES])
+    if len(spoken) > MAX_SPOKEN_CHARS:
+        # A model that writes a handful of very long run-on "sentences"
+        # slips past the count-based cap above - fall back to cutting at
+        # the last sentence boundary inside the character budget, or if
+        # there isn't one, the last space, so this never hacks off mid-word.
+        cut = spoken[:MAX_SPOKEN_CHARS]
+        boundary = max(cut.rfind(". "), cut.rfind("! "), cut.rfind("? "))
+        spoken = cut[: boundary + 1] if boundary != -1 else cut[: cut.rfind(" ")]
+        spoken = spoken.strip()
     return spoken, composure, delta, asked, concepts
 
 
