@@ -7,10 +7,13 @@ to be printed on screen.
 START_MIN = 20 * 60          # 20:00
 END_MIN = START_MIN + 252    # 00:12, the hour the case fiction points at
 
-# One in-game minute per real minute played (1:1), so idling is never free,
-# plus per-action jumps that dominate the budget for anyone actually working
-# the case. Tune these together against a real playtest, not in isolation.
-DRIP_MIN_PER_SEC = 1 / 60
+# One in-game minute per 2.5 real minutes, so idling is never free but the
+# per-action jumps below genuinely dominate the budget for anyone actually
+# working the case - which is what this pair was always meant to do. At the
+# old 1:1 rate the drip was a co-equal cost with deliberate action, and a
+# thorough 30-60 minute session ran long enough to lose suspects to their
+# own departure schedules through no fault of the player.
+DRIP_MIN_PER_SEC = 1 / 150
 COST_QUESTION = 3
 COST_PRESENT = 2
 COST_ENTER_BUILDING = 3
@@ -20,11 +23,18 @@ COST_EXAMINE = 1
 # starts at (minutes since START_MIN) and carries everything downstream reads:
 # how dark the world gets, what fraction of lamps survive, how weather should
 # lean, and how much a suspect's own willingness to move is damped.
+#
+# Thresholds are set against what a real session actually reaches, not against
+# the fiction's 252-minute span: a thorough 30-minute run lands near 105 and a
+# 60-minute one near 138, so at the old 90/150/210 spacing "late" and
+# "small_hrs" - and the late-night lines they unlock in llm.py - would almost
+# never be seen. Compressed, the whole escalation plays out inside one
+# sitting, while still sitting well below the earliest departure (170).
 PHASES = [
     (0,   {"name": "evening",   "dark_alpha": 132, "tint": (10, 12, 30), "lamp_frac": 1.00, "weather_bias": 0.0,  "damp": 1.00}),
-    (90,  {"name": "night",     "dark_alpha": 158, "tint": (8, 10, 28),  "lamp_frac": 1.00, "weather_bias": 0.15, "damp": 0.90}),
-    (150, {"name": "late",      "dark_alpha": 184, "tint": (7, 8, 24),   "lamp_frac": 0.75, "weather_bias": 0.35, "damp": 0.75}),
-    (210, {"name": "small_hrs", "dark_alpha": 205, "tint": (5, 6, 20),   "lamp_frac": 0.50, "weather_bias": 0.55, "damp": 0.60}),
+    (40,  {"name": "night",     "dark_alpha": 158, "tint": (8, 10, 28),  "lamp_frac": 1.00, "weather_bias": 0.15, "damp": 0.90}),
+    (80,  {"name": "late",      "dark_alpha": 184, "tint": (7, 8, 24),   "lamp_frac": 0.75, "weather_bias": 0.35, "damp": 0.75}),
+    (120, {"name": "small_hrs", "dark_alpha": 205, "tint": (5, 6, 20),   "lamp_frac": 0.50, "weather_bias": 0.55, "damp": 0.60}),
 ]
 
 

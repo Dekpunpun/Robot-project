@@ -19,7 +19,7 @@ import clock as clockmod
 import llm
 import sfx
 import ui
-from case import CASE, EVIDENCE_BY_ID, SUSPECTS_BY_ID
+from case import CASE, EVIDENCE_BY_ID, SUSPECTS_BY_ID, pick_culprit, validate_culprit_pool
 from entities import NPC, Player
 from settings import *
 from world import MAP_H, MAP_W, World
@@ -155,6 +155,11 @@ class Game:
     # -- run state -----------------------------------------------------------
 
     def reset_run(self):
+        # Rolled fresh every run, including a replay from the ending screen -
+        # pick_culprit() restores whoever was guilty last time before picking
+        # again, so their guilty text never leaks into a run where they're
+        # innocent.
+        pick_culprit()
         self.clock = clockmod.Clock()
         self.world.reset_floors()
         self.found = []  # evidence ids picked up in the world (or unlocked by dialogue)
@@ -989,10 +994,20 @@ class Game:
         if self.ai.status != "ok" and self.tick % (FPS * 4) == 0:
             self.ai.check()
 
-        # PAUSED deliberately keeps ticking here - pausing must never be a
-        # way to buy free thinking time against the night clock.
+        # Weather is cosmetic and runs wherever the world is visible.
         if self.state in (PLAYING, TALKING, PAUSED):
             self._update_weather(dt)
+
+        # The clock is mechanical, so it's gated more carefully. PAUSED
+        # deliberately keeps ticking - pausing must never be a way to buy free
+        # thinking time against the night clock. TALKING ticks too, but only
+        # while the player is the one taking the time: reading a reply, typing
+        # the next question, browsing evidence. It stops dead while a request
+        # is in flight, because a local model can take anywhere from five
+        # seconds to two minutes to answer and none of that is the player's
+        # doing - charging for it made how much night you had left a function
+        # of your hardware.
+        if self.state in (PLAYING, PAUSED) or (self.state == TALKING and not self.ai.busy):
             self.clock.tick(dt)
 
         if self.state == PLAYING:
@@ -1772,8 +1787,11 @@ def _selftest_winnable():
             f"{best_floor}, short of minPressure {strong['minPressure']} - the strong ending "
             "would be unreachable without the model contributing a delta"
         )
-    if conv["culprit"] not in SUSPECTS_BY_ID:
-        problems.append(f"conviction culprit {conv['culprit']!r} is not a real suspect id")
+    # Game()'s own reset_run() already rolled a random culprit before this
+    # ever runs, so checking only that one would make CI's coverage of Doss's
+    # and Ashworth's guiltVariant text a coin flip. validate_culprit_pool()
+    # checks every pool member's variant is complete, unconditionally.
+    problems += validate_culprit_pool()
     return problems
 
 

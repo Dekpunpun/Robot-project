@@ -365,7 +365,7 @@ NIGHT_FLAVOR = {
                  "detective is racing toward is close now, if it isn't already too late.",
 }
 
-THORNE_LATE_LINE = (
+CULPRIT_LATE_LINE = (
     " Your own deadline is bearing down as the night wears on, which makes you more "
     "desperate and more clipped, not calmer - you feel time bleeding away even while you "
     "deflect."
@@ -377,8 +377,12 @@ def system_prompt(suspect_id, state, night):
     stance, control_help = _stance(s, state)
     facts = "\n".join(f"- {f}" for f in CASE["facts"])
     hour_line = NIGHT_FLAVOR.get(night["name"], "")
-    if suspect_id == "thorne" and night["name"] in ("late", "small_hrs"):
-        hour_line += THORNE_LATE_LINE
+    # Whoever is actually racing the midnight handoff feels the hour bearing
+    # down harder than everyone else does - which suspect that is changes
+    # every run (see case.py's pick_culprit()), so this reads off the current
+    # culprit rather than a suspect id baked in at authoring time.
+    if suspect_id == CASE["conviction"]["culprit"] and night["name"] in ("late", "small_hrs"):
+        hour_line += CULPRIT_LATE_LINE
     if state.get("warned"):
         hour_line += (
             " You already told the detective you're on limited time here, and you feel that "
