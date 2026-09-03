@@ -1281,13 +1281,22 @@ class Game:
             y = self._section("NAME ONE", 28)
             for i, sp in enumerate(suspects):
                 sel = i == self.accuse_index
+                # Was `[0]` (first wrapped line only) at a fixed 26px box
+                # height - silently dropped the tail of any role too long
+                # for one line (Doss's "...Depot", Bricker's "...oldest
+                # friend"). The box grows to fit however many lines wrap.
+                role_lines = ui.wrap(sp["role"], SCREEN_W - 40)
+                box_h = 16 + len(role_lines) * 10
                 if sel:
-                    pygame.draw.rect(s, UI_BG_2, (12, y - 3, SCREEN_W - 24, 26))
-                    pygame.draw.rect(s, UI_LINE, (12, y - 3, SCREEN_W - 24, 26), 1)
+                    pygame.draw.rect(s, UI_BG_2, (12, y - 3, SCREEN_W - 24, box_h))
+                    pygame.draw.rect(s, UI_LINE, (12, y - 3, SCREEN_W - 24, box_h), 1)
                     ui.text(s, ">", 16, y + 2, ACCENT)
                 ui.text(s, sp["name"], 26, y, UI_TEXT if sel else UI_DIM)
-                ui.text(s, ui.wrap(sp["role"], SCREEN_W - 40)[0], 26, y + 11, UI_FAINT)
-                y += 30
+                ry = y + 11
+                for line in role_lines:
+                    ui.text(s, line, 26, ry, UI_FAINT)
+                    ry += 10
+                y += box_h + 4
             return
 
         accused = SUSPECTS_BY_ID[self.accuse_confirm]
@@ -1325,10 +1334,19 @@ class Game:
                 ("F11", "FULLSCREEN"),
                 ("M", "SOUND"),
             ]
+            # Column start was 110px - narrower than "E / SPACE / ENTER"
+            # itself (136px), so the longest keys ran straight into their
+            # own description text ("ARROWS" into "MOVE", "ENTER" into
+            # "LOOK..."). DESC_X clears the widest key in this list; the
+            # description wraps rather than assuming one line, since the
+            # longest ones (e.g. TAB's) ran off the right edge otherwise.
+            DESC_X = 164
             for key, what in lines:
                 ui.text(s, key, 20, y, ACCENT)
-                ui.text(s, what, 110, y, UI_DIM)
-                y += 12
+                wrapped = ui.wrap(what, SCREEN_W - DESC_X - 14)
+                for i, line in enumerate(wrapped):
+                    ui.text(s, line, DESC_X, y + i * 10, UI_DIM)
+                y += max(12, len(wrapped) * 10) + 2
             return
 
         ui.terminal_frame(s, "HRPD // STAND BY", self.tick, "ENTER SELECT   ESC RESUME")
@@ -1464,8 +1482,11 @@ class Game:
                     break
                 ui.text(s, sp["name"], 18, y, UI_TEXT)
                 y += 10
-                ui.text(s, ui.wrap(sp["role"], SCREEN_W - 34)[0], 18, y, UI_FAINT)
-                y += 12
+                # Was `[0]` (first wrapped line only), which silently
+                # dropped the tail of any role too long for one line - e.g.
+                # Bricker's "- Thorne's oldest friend" never showed at all.
+                y = self._draw_wrapped(ui.wrap(sp["role"], SCREEN_W - 34), 18, y, UI_FAINT)
+                y += 2
             return
 
         exhibit_end = self.CASEFILE_INTRO_PAGES + len(self.found)
@@ -1488,10 +1509,19 @@ class Game:
             # no way to check back against once a line scrolled off the box.
             tp = tpages[page - exhibit_end]
             name = SUSPECTS_BY_ID[tp["sid"]]["name"].upper()
-            label = f"HRPD // TRANSCRIPT - {name}"
-            if tp["total"] > 1:
-                label += f" ({tp['part']}/{tp['total']})"
-            ui.terminal_frame(s, label, self.tick, footer)
+            prefix = "HRPD // TRANSCRIPT - "
+            suffix = f" ({tp['part']}/{tp['total']})" if tp["total"] > 1 else ""
+            # A long full rank+name (Thorne's, worst case) can outrun the
+            # title bar and run past the frame's edge - trim the name, never
+            # the (part/total) suffix, since that's what matters most for
+            # paging through a multi-part transcript.
+            room = SCREEN_W - 40 - ui.text_w(prefix) - ui.text_w(suffix)
+            full_name = name
+            while name and ui.text_w(name) > room:
+                name = name[:-1]
+            if name != full_name and " " in name:
+                name = name.rsplit(" ", 1)[0]  # back up to a whole word
+            ui.terminal_frame(s, prefix + name + suffix, self.tick, footer)
             y = 28
             for kind, value in tp["lines"]:
                 if kind == "tag":
