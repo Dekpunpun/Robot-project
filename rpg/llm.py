@@ -112,6 +112,19 @@ class Client:
 
     def _check(self):
         try:
+            self._probe()
+        finally:
+            self.checking = False
+
+    def _probe(self):
+        """The actual connectivity check, with no `checking`-flag bookkeeping
+        of its own - `_check()` above owns that flag on behalf of the
+        background thread `check()` starts. `_ask()` below also calls this
+        directly (synchronously, on its own worker thread) when no model id
+        is known yet; it must not go through `_check()` for that, since
+        clearing `checking` on a turn that never set it could stomp on an
+        unrelated check already in flight from `check()`."""
+        try:
             data = _get("/models")
             ids = [m["id"] for m in data.get("data", []) if _is_chat_model(m.get("id", ""))]
             if not ids:
@@ -122,8 +135,6 @@ class Client:
         except Exception as e:  # noqa: BLE001 - any failure means "not reachable"
             self.status = "down"
             self.error = f"{BASE_URL} is not answering ({e.__class__.__name__})."
-        finally:
-            self.checking = False
 
     # --- one turn --------------------------------------------------------
 
@@ -176,7 +187,7 @@ class Client:
     def _ask(self, messages, gen):
         try:
             if not self.model:
-                self._check()
+                self._probe()
                 if self.status != "ok":
                     raise RuntimeError(self.error)
 
