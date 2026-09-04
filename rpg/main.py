@@ -998,16 +998,18 @@ class Game:
         if self.state in (PLAYING, TALKING, PAUSED):
             self._update_weather(dt)
 
-        # The clock is mechanical, so it's gated more carefully. PAUSED
-        # deliberately keeps ticking - pausing must never be a way to buy free
-        # thinking time against the night clock. TALKING ticks too, but only
-        # while the player is the one taking the time: reading a reply, typing
-        # the next question, browsing evidence. It stops dead while a request
-        # is in flight, because a local model can take anywhere from five
-        # seconds to two minutes to answer and none of that is the player's
-        # doing - charging for it made how much night you had left a function
-        # of your hardware.
-        if self.state in (PLAYING, PAUSED) or (self.state == TALKING and not self.ai.busy):
+        # The clock is mechanical, so it's gated more carefully. PAUSED,
+        # CASEFILE and ACCUSE all deliberately keep ticking - none of them
+        # may be a way to buy free thinking time against the night clock,
+        # and the case file in particular is exactly where a player plans
+        # their next move. TALKING ticks too, but only while the player is
+        # the one taking the time: reading a reply, typing the next
+        # question, browsing evidence. It stops dead while a request is in
+        # flight, because a local model can take anywhere from five seconds
+        # to two minutes to answer and none of that is the player's doing -
+        # charging for it made how much night you had left a function of
+        # your hardware.
+        if self.state in (PLAYING, PAUSED, CASEFILE, ACCUSE) or (self.state == TALKING and not self.ai.busy):
             self.clock.tick(dt)
 
         if self.state == PLAYING:
@@ -1787,6 +1789,11 @@ def _selftest_winnable():
             f"{best_floor}, short of minPressure {strong['minPressure']} - the strong ending "
             "would be unreachable without the model contributing a delta"
         )
+    # This run's own pick, from Game()'s reset_run() -> pick_culprit() - a
+    # cheap sanity check that the runtime key actually got set, independent of
+    # validate_culprit_pool() below which checks every pool member instead.
+    if conv.get("culprit") not in SUSPECTS_BY_ID:
+        problems.append(f"conviction culprit {conv.get('culprit')!r} is not a real suspect id")
     # Game()'s own reset_run() already rolled a random culprit before this
     # ever runs, so checking only that one would make CI's coverage of Doss's
     # and Ashworth's guiltVariant text a coin flip. validate_culprit_pool()

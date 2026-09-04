@@ -117,6 +117,7 @@ CASE = {
                 "protects": "the vault thefts, the override code, the burner phone, and where Mira and the fifth case are",
                 "concession": "that he is terrified and out of options, and that this was never about money",
                 "gate_camera_text": {
+                    "summary": "Thorne's truck out after-hours all five nights; a masked handoff on the last.",
                     "detail": (
                         "A cracked monitor cycling through a week of grainy footage. On all five nights "
                         "matching the ledger, one truck logs out after hours: registered to Staff "
@@ -208,6 +209,7 @@ CASE = {
                 "protects": "that he ran the checkouts himself, the override he dug up, and where the last case goes tonight",
                 "concession": "that he broke the one rule he has built his whole career on, deliberately, and would do it again",
                 "gate_camera_text": {
+                    "summary": "Doss's car out after-hours all five nights; a masked handoff on the last.",
                     "detail": (
                         "A cracked monitor cycling through a week of grainy footage. On all five nights "
                         "matching the ledger, one car logs out after hours: registered to Corporal Wyatt "
@@ -328,6 +330,7 @@ CASE = {
                 "protects": "that the override was used knowingly, that she drove the checkouts herself, and where the last handoff is",
                 "concession": "that she chose to break the law herself rather than let the system fail one of her own soldiers twice",
                 "gate_camera_text": {
+                    "summary": "Ashworth's staff car out after-hours all five nights; a masked handoff on the last.",
                     "detail": (
                         "A cracked monitor cycling through a week of grainy footage. On all five nights "
                         "matching the ledger, one staff car logs out after hours: registered to the "
@@ -663,7 +666,7 @@ _CULPRIT_SWAP_FIELDS = ("hiddenTruth", "motive", "protects", "concession")
 _BASE_SUSPECT_FIELDS = {
     sid: {k: s[k] for k in _CULPRIT_SWAP_FIELDS} for sid, s in SUSPECTS_BY_ID.items()
 }
-_BASE_GATE_CAMERA = {k: EVIDENCE_BY_ID["gate-camera"][k] for k in ("detail", "contradicts", "found_text")}
+_BASE_GATE_CAMERA = {k: EVIDENCE_BY_ID["gate-camera"][k] for k in ("summary", "detail", "contradicts", "found_text")}
 _BASE_SOLUTION = CASE["solution"]
 _BASE_ENDING_PROSE = {shape: CASE["endings"][shape]["prose"] for shape in ("correct_strong", "correct_thin")}
 _BASE_WRONG_SUSPECT_PREFIX = CASE["endings"]["wrong_suspect"]["prose_prefix"]
@@ -677,7 +680,10 @@ def pick_culprit(rng=random):
     exactly as before - this only changes what those reads resolve to.
 
     Set FORCE_CULPRIT in the environment to pin a specific suspect id instead
-    of rolling, for testing one branch by hand.
+    of rolling, for testing one branch by hand. A value set but not in the
+    pool raises rather than silently rolling anyway - a verification run
+    built around one suspect must not pass by accident against a different,
+    randomly-chosen one.
     """
     for sid, base in _BASE_SUSPECT_FIELDS.items():
         SUSPECTS_BY_ID[sid].update(base)
@@ -689,7 +695,12 @@ def pick_culprit(rng=random):
 
     pool = CASE["conviction"]["culprit_pool"]
     forced = os.environ.get("FORCE_CULPRIT")
-    culprit = forced if forced in pool else rng.choice(pool)
+    if forced:
+        if forced not in pool:
+            raise ValueError(f"FORCE_CULPRIT={forced!r} is not in the culprit pool {pool!r}")
+        culprit = forced
+    else:
+        culprit = rng.choice(pool)
 
     variant = SUSPECTS_BY_ID[culprit]["guiltVariant"]
     SUSPECTS_BY_ID[culprit].update({k: variant[k] for k in _CULPRIT_SWAP_FIELDS})
